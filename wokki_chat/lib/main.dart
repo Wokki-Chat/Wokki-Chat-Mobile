@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:wokki_chat/services/auth_service.dart';
+import 'package:wokki_chat/services/user_service.dart';
 import 'package:wokki_chat/screens/welcome_screen.dart';
 import 'package:wokki_chat/screens/login_screen.dart';
 import 'package:wokki_chat/screens/signup_screen.dart';
+import 'package:wokki_chat/screens/account_setup_screen.dart';
+import 'package:wokki_chat/screens/home_shell.dart';
 import 'package:wokki_chat/theme/app_theme.dart';
 import 'dart:io';
 
@@ -35,7 +38,8 @@ class WokkiChatApp extends StatelessWidget {
         '/welcome': (context) => const WelcomeScreen(),
         '/login': (context) => const LoginScreen(),
         '/signup': (context) => const SignupScreen(),
-        '/home': (context) => const WokkiChatHome(),
+        '/setup': (context) => const AccountSetupScreen(),
+        '/home': (context) => const HomeShell(),
       },
     );
   }
@@ -70,46 +74,11 @@ class _AuthGateState extends State<AuthGate> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
+      return Scaffold(
+        backgroundColor: AppThemeMode.slate.colors.surfaceA0,
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
-
-    return _hasToken ? const WokkiChatHome() : const WelcomeScreen();
-  }
-}
-
-class WokkiChatHome extends StatelessWidget {
-  const WokkiChatHome({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Wokki Chat'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await AuthService().clearTokens();
-              if (context.mounted) {
-                Navigator.pushReplacementNamed(context, '/welcome');
-              }
-            },
-          ),
-        ],
-      ),
-      body: const Center(
-        child: Text(
-          'Welcome to Wokki Chat!',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-    );
+    return _hasToken ? const AccountSetupScreen() : const WelcomeScreen();
   }
 }
