@@ -17,16 +17,16 @@ val flutterVersionName = localProperties.getProperty("flutter.versionName") ?: "
 
 android {
     namespace = "nl.wokki20.wokki_chat"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "17"
     }
 
     sourceSets {
@@ -38,7 +38,7 @@ android {
     defaultConfig {
         applicationId = "nl.wokki20.wokki_chat"
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 36
         versionCode = flutterVersionCode.toInt()
         versionName = flutterVersionName
     }

@@ -4,19 +4,76 @@ import 'package:http/http.dart' as http;
 import 'package:wokki_chat/config/app_config.dart';
 import 'package:wokki_chat/models/user_model.dart';
 import 'package:wokki_chat/services/device_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class UserService {
   static UserModel? _cachedUser;
+  static const _cacheKey = 'cached_user';
 
   static UserModel? get cachedUser => _cachedUser;
 
   static void clearCache() {
     _cachedUser = null;
+    _clearPersistedUser();
   }
 
   static void _log(String message) {
     developer.log(message, name: 'UserService');
     print('[UserService] $message');
+  }
+  
+  static Future<UserModel?> loadCachedUser() async {
+    if (_cachedUser != null) return _cachedUser;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getString(_cacheKey);
+      if (stored == null) return null;
+      final user = UserModel.fromJson(jsonDecode(stored) as Map<String, dynamic>);
+      _cachedUser = user;
+      _log('Loaded persisted user from storage. username=${user.username}');
+      return user;
+    } catch (e) {
+      _log('Failed to load persisted user: $e');
+      return null;
+    }
+  }
+
+  static Future<void> _persistUser(UserModel user) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_cacheKey, jsonEncode({
+        'id': user.id,
+        'username': user.username,
+        'display_name': user.displayName,
+        'email': user.email,
+        'bio': user.bio,
+        'status': user.status,
+        'avatar': user.avatar,
+        'banner': user.banner,
+        'accent_color': user.accentColor,
+        'primary_color': user.primaryColor,
+        'premium': user.premium,
+        'staff': user.staff,
+        'developer': user.developer,
+        'bot': user.bot,
+        'tags': user.tags,
+        'connections': user.connections,
+        'created_at': user.createdAt,
+      }));
+      _log('Persisted user to storage. username=${user.username}');
+    } catch (e) {
+      _log('Failed to persist user: $e');
+    }
+  }
+
+  static Future<void> _clearPersistedUser() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_cacheKey);
+      _log('Cleared persisted user from storage.');
+    } catch (e) {
+      _log('Failed to clear persisted user: $e');
+    }
   }
 
   static Future<UserModel> fetchMyProfile(String accessToken) async {
@@ -97,6 +154,7 @@ class UserService {
 
           final user = UserModel.fromJson(userData);
           _cachedUser = user;
+          await _persistUser(user);
           _log('Profile fetched successfully. username=${user.username} id=${user.id}');
           return user;
 

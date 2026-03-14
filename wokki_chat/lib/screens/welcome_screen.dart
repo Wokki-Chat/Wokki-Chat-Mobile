@@ -19,16 +19,13 @@ class WelcomeScreen extends StatelessWidget {
               const Spacer(flex: 2),
               Center(
                 child: Container(
-                  width: 88,
-                  height: 88,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: colors.primaryA0.withOpacity(0.12),
-                  ),
-                  child: Icon(
-                    Icons.chat_bubble_rounded,
-                    size: 44,
-                    color: colors.primaryA0,
+                  width: 100,
+                  height: 100,
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/icon/logo.png',
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
               ),

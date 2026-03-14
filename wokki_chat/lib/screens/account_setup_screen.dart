@@ -42,11 +42,16 @@ class _AccountSetupScreenState extends State<AccountSetupScreen>
     }
 
     final authService = AuthService();
-    await Future.delayed(const Duration(milliseconds: 400));
-
     final token = await authService.getAccessToken();
+
     if (token == null) {
       if (mounted) Navigator.pushReplacementNamed(context, '/welcome');
+      return;
+    }
+
+    if (UserService.cachedUser != null) {
+      if (mounted) Navigator.pushReplacementNamed(context, '/home');
+      UserService.fetchMyProfile(token).catchError((_) {});
       return;
     }
 
@@ -109,13 +114,21 @@ class _AccountSetupScreenState extends State<AccountSetupScreen>
                     child: _isError
                         ? Icon(Icons.error_outline_rounded,
                             size: 40, color: colors.dangerA10)
-                        : SizedBox(
-                            width: 44,
-                            height: 44,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 3,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                  colors.primaryA0),
+                        : ClipOval(
+                            child: Image.asset(
+                              'assets/icon/icon.png',
+                              width: 88,
+                              height: 88,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => SizedBox(
+                                width: 44,
+                                height: 44,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 3,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                      colors.primaryA0),
+                                ),
+                              ),
                             ),
                           ),
                   ),

@@ -65,6 +65,9 @@ class _AuthGateState extends State<AuthGate> {
 
   Future<void> _checkAuth() async {
     final hasToken = await _authService.hasAccessToken();
+    if (hasToken) {
+      await UserService.loadCachedUser();
+    }
     setState(() {
       _hasToken = hasToken;
       _isLoading = false;
