@@ -5,9 +5,18 @@ import 'package:wokki_chat/config/app_config.dart';
 import 'package:wokki_chat/services/device_service.dart';
 
 class ApiService {
+  static List<String> get _baseUrls {
+    final urls = [AppConfig.apiUrl];
+    if (AppConfig.apiUrlFallback.isNotEmpty) {
+      urls.add(AppConfig.apiUrlFallback);
+    }
+    return urls;
+  }
+
   static Future<Map<String, String>> _signedHeaders(String body) async {
     final deviceId = await DeviceService.getDeviceId();
-    final timestamp = (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString();
+    final timestamp =
+        (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString();
     final message = '$timestamp.$deviceId.$body';
     final hmac = Hmac(sha256, utf8.encode(AppConfig.hmacSecret));
     final signature = hmac.convert(utf8.encode(message)).toString();
@@ -17,6 +26,47 @@ class ApiService {
       'X-App-Signature': signature,
       'X-Device-ID': deviceId,
     };
+  }
+
+  static Future<http.Response> _postWithFallback({
+    required String path,
+    required Map<String, String> headers,
+    required String body,
+  }) async {
+    Exception? lastError;
+    for (final base in _baseUrls) {
+      try {
+        final response = await http
+            .post(
+              Uri.parse('$base$path'),
+              headers: headers,
+              body: body,
+            )
+            .timeout(const Duration(seconds: 10));
+        return response;
+      } catch (e) {
+        lastError = e is Exception ? e : Exception(e.toString());
+      }
+    }
+    throw lastError ?? Exception('All endpoints unreachable');
+  }
+
+  static Future<http.Response> _getWithFallback({
+    required String path,
+    required Map<String, String> headers,
+  }) async {
+    Exception? lastError;
+    for (final base in _baseUrls) {
+      try {
+        final response = await http
+            .get(Uri.parse('$base$path'), headers: headers)
+            .timeout(const Duration(seconds: 10));
+        return response;
+      } catch (e) {
+        lastError = e is Exception ? e : Exception(e.toString());
+      }
+    }
+    throw lastError ?? Exception('All endpoints unreachable');
   }
 
   static Future<Map<String, dynamic>> loginWithPassword({
@@ -30,8 +80,8 @@ class ApiService {
       'client_id': AppConfig.clientId,
     });
 
-    final response = await http.post(
-      Uri.parse('${AppConfig.apiUrl}/mobile_token'),
+    final response = await _postWithFallback(
+      path: '/mobile_token',
       headers: await _signedHeaders(body),
       body: body,
     );
@@ -61,34 +111,52 @@ class ApiService {
       'client_id': AppConfig.clientId,
     });
 
-    final response = await http.post(
-      Uri.parse('${AppConfig.apiUrl}/signup'),
-      headers: {'Content-Type': 'application/json'},
-      body: body,
-    );
+    final headers = {'Content-Type': 'application/json'};
 
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      final data = jsonDecode(response.body);
-      return {
-        'access_token': data['access_token'],
-        'refresh_token': data['refresh_token'] ?? '',
-        'expires_in': data['expires_in'] ?? 3600,
-      };
-    } else {
-      final error = jsonDecode(response.body);
-      throw Exception(error['error_description'] ?? error['message'] ?? 'Signup failed');
+    Exception? lastError;
+    for (final base in _baseUrls) {
+      try {
+        final response = await http
+            .post(
+              Uri.parse('$base/signup'),
+              headers: headers,
+              body: body,
+            )
+            .timeout(const Duration(seconds: 10));
+
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          final data = jsonDecode(response.body);
+          return {
+            'access_token': data['access_token'],
+            'refresh_token': data['refresh_token'] ?? '',
+            'expires_in': data['expires_in'] ?? 3600,
+          };
+        } else {
+          final error = jsonDecode(response.body);
+          throw Exception(
+              error['error_description'] ?? error['message'] ?? 'Signup failed');
+        }
+      } on Exception catch (e) {
+        if (e.toString().contains('Signup failed') ||
+            e.toString().contains('error_description')) {
+          rethrow;
+        }
+        lastError = e;
+      }
     }
+    throw lastError ?? Exception('All endpoints unreachable');
   }
 
-  static Future<Map<String, dynamic>> refreshToken(String refreshToken) async {
+  static Future<Map<String, dynamic>> refreshToken(
+      String refreshToken) async {
     final body = jsonEncode({
       'grant_type': 'refresh_token',
       'refresh_token': refreshToken,
       'client_id': AppConfig.clientId,
     });
 
-    final response = await http.post(
-      Uri.parse('${AppConfig.apiUrl}/mobile_token'),
+    final response = await _postWithFallback(
+      path: '/mobile_token',
       headers: await _signedHeaders(body),
       body: body,
     );
@@ -102,7 +170,8 @@ class ApiService {
       };
     } else {
       final error = jsonDecode(response.body);
-      throw Exception(error['error_description'] ?? 'Token refresh failed');
+      throw Exception(
+          error['error_description'] ?? 'Token refresh failed');
     }
   }
 
@@ -113,52 +182,72 @@ class ApiService {
     Map<String, dynamic>? body,
   }) async {
     final deviceId = await DeviceService.getDeviceId();
-    final uri = Uri.parse('${AppConfig.apiUrl}$endpoint');
     final headers = {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer $accessToken',
       'X-Device-ID': deviceId,
     };
 
-    http.Response response;
+    Exception? lastError;
 
-    switch (method.toUpperCase()) {
-      case 'GET':
-        response = await http.get(uri, headers: headers);
-        break;
-      case 'POST':
-        response = await http.post(
-          uri,
-          headers: headers,
-          body: body != null ? jsonEncode(body) : null,
-        );
-        break;
-      case 'PUT':
-        response = await http.put(
-          uri,
-          headers: headers,
-          body: body != null ? jsonEncode(body) : null,
-        );
-        break;
-      case 'DELETE':
-        response = await http.delete(uri, headers: headers);
-        break;
-      default:
-        throw Exception('Unsupported HTTP method: $method');
-    }
-
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      if (response.body.isEmpty) return {};
-      return jsonDecode(response.body);
-    } else if (response.statusCode == 401) {
-      throw Exception('Unauthorized - token may be expired');
-    } else {
+    for (final base in _baseUrls) {
+      final uri = Uri.parse('$base$endpoint');
       try {
-        final error = jsonDecode(response.body);
-        throw Exception(error['error_description'] ?? error['message'] ?? 'Request failed');
-      } catch (_) {
-        throw Exception('Request failed with status ${response.statusCode}');
+        http.Response response;
+        switch (method.toUpperCase()) {
+          case 'GET':
+            response = await http
+                .get(uri, headers: headers)
+                .timeout(const Duration(seconds: 10));
+            break;
+          case 'POST':
+            response = await http
+                .post(uri,
+                    headers: headers,
+                    body: body != null ? jsonEncode(body) : null)
+                .timeout(const Duration(seconds: 10));
+            break;
+          case 'PUT':
+            response = await http
+                .put(uri,
+                    headers: headers,
+                    body: body != null ? jsonEncode(body) : null)
+                .timeout(const Duration(seconds: 10));
+            break;
+          case 'DELETE':
+            response = await http
+                .delete(uri, headers: headers)
+                .timeout(const Duration(seconds: 10));
+            break;
+          default:
+            throw Exception('Unsupported HTTP method: $method');
+        }
+
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          if (response.body.isEmpty) return {};
+          return jsonDecode(response.body);
+        } else if (response.statusCode == 401) {
+          throw Exception('Unauthorized - token may be expired');
+        } else {
+          try {
+            final error = jsonDecode(response.body);
+            throw Exception(error['error_description'] ??
+                error['message'] ??
+                'Request failed');
+          } catch (_) {
+            throw Exception(
+                'Request failed with status ${response.statusCode}');
+          }
+        }
+      } on Exception catch (e) {
+        if (e.toString().contains('Unauthorized') ||
+            e.toString().contains('Unsupported HTTP method')) {
+          rethrow;
+        }
+        lastError = e;
       }
     }
+
+    throw lastError ?? Exception('All endpoints unreachable');
   }
 }
