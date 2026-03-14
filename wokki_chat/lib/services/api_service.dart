@@ -1,21 +1,39 @@
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:wokki_chat/config/app_config.dart';
+import 'package:wokki_chat/services/device_service.dart';
 
 class ApiService {
+  static Future<Map<String, String>> _signedHeaders(String body) async {
+    final deviceId = await DeviceService.getDeviceId();
+    final timestamp = (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString();
+    final message = '$timestamp.$deviceId.$body';
+    final hmac = Hmac(sha256, utf8.encode(AppConfig.hmacSecret));
+    final signature = hmac.convert(utf8.encode(message)).toString();
+    return {
+      'Content-Type': 'application/json',
+      'X-App-Timestamp': timestamp,
+      'X-App-Signature': signature,
+      'X-Device-ID': deviceId,
+    };
+  }
+
   static Future<Map<String, dynamic>> loginWithPassword({
     required String email,
     required String password,
   }) async {
+    final body = jsonEncode({
+      'grant_type': 'password',
+      'email': email,
+      'password': password,
+      'client_id': AppConfig.clientId,
+    });
+
     final response = await http.post(
-      Uri.parse('${AppConfig.apiUrl}/authorize'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'email': email,
-        'password': password,
-        'client_id': AppConfig.clientId,
-        'response_type': 'token',
-      }),
+      Uri.parse('${AppConfig.apiUrl}/mobile_token'),
+      headers: await _signedHeaders(body),
+      body: body,
     );
 
     if (response.statusCode == 200) {
@@ -27,7 +45,7 @@ class ApiService {
       };
     } else {
       final error = jsonDecode(response.body);
-      throw Exception(error['message'] ?? 'Login failed');
+      throw Exception(error['error_description'] ?? 'Login failed');
     }
   }
 
@@ -36,15 +54,17 @@ class ApiService {
     required String email,
     required String password,
   }) async {
+    final body = jsonEncode({
+      'name': name,
+      'email': email,
+      'password': password,
+      'client_id': AppConfig.clientId,
+    });
+
     final response = await http.post(
       Uri.parse('${AppConfig.apiUrl}/signup'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'name': name,
-        'email': email,
-        'password': password,
-        'client_id': AppConfig.clientId,
-      }),
+      body: body,
     );
 
     if (response.statusCode == 200 || response.statusCode == 201) {
@@ -56,19 +76,21 @@ class ApiService {
       };
     } else {
       final error = jsonDecode(response.body);
-      throw Exception(error['message'] ?? 'Signup failed');
+      throw Exception(error['error_description'] ?? error['message'] ?? 'Signup failed');
     }
   }
 
   static Future<Map<String, dynamic>> refreshToken(String refreshToken) async {
+    final body = jsonEncode({
+      'grant_type': 'refresh_token',
+      'refresh_token': refreshToken,
+      'client_id': AppConfig.clientId,
+    });
+
     final response = await http.post(
-      Uri.parse('${AppConfig.apiUrl}/token'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'grant_type': 'refresh_token',
-        'refresh_token': refreshToken,
-        'client_id': AppConfig.clientId,
-      }),
+      Uri.parse('${AppConfig.apiUrl}/mobile_token'),
+      headers: await _signedHeaders(body),
+      body: body,
     );
 
     if (response.statusCode == 200) {
@@ -80,7 +102,7 @@ class ApiService {
       };
     } else {
       final error = jsonDecode(response.body);
-      throw Exception(error['message'] ?? 'Token refresh failed');
+      throw Exception(error['error_description'] ?? 'Token refresh failed');
     }
   }
 
@@ -90,10 +112,12 @@ class ApiService {
     required String accessToken,
     Map<String, dynamic>? body,
   }) async {
+    final deviceId = await DeviceService.getDeviceId();
     final uri = Uri.parse('${AppConfig.apiUrl}$endpoint');
     final headers = {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer $accessToken',
+      'X-Device-ID': deviceId,
     };
 
     http.Response response;
@@ -131,7 +155,7 @@ class ApiService {
     } else {
       try {
         final error = jsonDecode(response.body);
-        throw Exception(error['message'] ?? 'Request failed');
+        throw Exception(error['error_description'] ?? error['message'] ?? 'Request failed');
       } catch (_) {
         throw Exception('Request failed with status ${response.statusCode}');
       }

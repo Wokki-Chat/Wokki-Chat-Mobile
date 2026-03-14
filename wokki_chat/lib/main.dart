@@ -5,9 +5,19 @@ import 'package:wokki_chat/screens/welcome_screen.dart';
 import 'package:wokki_chat/screens/login_screen.dart';
 import 'package:wokki_chat/screens/signup_screen.dart';
 import 'package:wokki_chat/theme/app_theme.dart';
+import 'dart:io';
+
+class _AllowSelfSigned extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return super.createHttpClient(context)
+      ..badCertificateCallback = (_, __, ___) => true;
+  }
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  HttpOverrides.global = _AllowSelfSigned();
   await dotenv.load(fileName: ".env");
   runApp(const WokkiChatApp());
 }
