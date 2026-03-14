@@ -5,14 +5,16 @@ import 'package:wokki_chat/theme/app_theme.dart';
 import 'package:wokki_chat/widgets/form_widgets.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final String? prefillEmail;
+
+  const LoginScreen({super.key, this.prefillEmail});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _emailController = TextEditingController();
+  late final TextEditingController _emailController;
   final _passwordController = TextEditingController();
   final _emailFocus = FocusNode();
   final _passwordFocus = FocusNode();
@@ -21,6 +23,17 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController = TextEditingController(text: widget.prefillEmail ?? '');
+    if (widget.prefillEmail != null && widget.prefillEmail!.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        FocusScope.of(context).requestFocus(_passwordFocus);
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -52,6 +65,14 @@ class _LoginScreenState extends State<LoginScreen> {
         accessToken: response['access_token'],
         refreshToken: response['refresh_token'],
       );
+
+      final refreshToken = response['refresh_token'] as String?;
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        await _authService.saveRefreshTokenForAccount(
+          _emailController.text.trim(),
+          refreshToken,
+        );
+      }
 
       if (mounted) {
         Navigator.pushReplacementNamed(context, '/setup');
@@ -170,6 +191,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 15),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
+                      side: BorderSide(color: colors.primaryA30, width: 1),
                     ),
                     textStyle: const TextStyle(
                       fontFamily: 'Inter',

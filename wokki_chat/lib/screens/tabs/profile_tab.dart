@@ -17,6 +17,7 @@ class ProfileTab extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: colors.surfaceA0,
         elevation: 0,
+        automaticallyImplyLeading: false,
         title: Text(
           'Profile',
           style: TextStyle(
@@ -30,6 +31,12 @@ class ProfileTab extends StatelessWidget {
           IconButton(
             icon: Icon(Icons.logout_rounded, color: colors.textA30),
             onPressed: () async {
+              final u = UserService.cachedUser;
+              await AuthService().recordLastLogin(
+                username: u?.effectiveName,
+                email: u?.email,
+                avatarUrl: u?.avatar,
+              );
               await AuthService().clearTokens();
               UserService.clearCache();
               if (context.mounted) {
@@ -65,19 +72,14 @@ class _ProfileContent extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const SizedBox(height: 12),
-          Container(
+          SizedBox(
             width: 90,
             height: 90,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: colors.primaryA0.withOpacity(0.2),
-              border: Border.all(color: colors.primaryA0, width: 2.5),
-            ),
             child: ClipOval(
               child: Image.network(
                 user.avatar ?? '',
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _avatarFallback(),
+                errorBuilder: (_, __, ___) => _avatarFallback(colors),
               ),
             ),
           ),
@@ -127,17 +129,20 @@ class _ProfileContent extends StatelessWidget {
     );
   }
 
-  Widget _avatarFallback() {
-    return Center(
-      child: Text(
-        user.effectiveName.isNotEmpty
-            ? user.effectiveName[0].toUpperCase()
-            : '?',
-        style: TextStyle(
-          fontFamily: 'Inter',
-          fontSize: 32,
-          fontWeight: FontWeight.w700,
-          color: colors.primaryA0,
+  Widget _avatarFallback(dynamic colors) {
+    return Container(
+      color: colors.surfaceA20,
+      child: Center(
+        child: Text(
+          user.effectiveName.isNotEmpty
+              ? user.effectiveName[0].toUpperCase()
+              : '?',
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 32,
+            fontWeight: FontWeight.w700,
+            color: colors.textA20,
+          ),
         ),
       ),
     );

@@ -179,6 +179,7 @@ class _AccountSetupScreenState extends State<AccountSetupScreen>
                         horizontal: 28, vertical: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: colors.primaryA30, width: 1),
                     ),
                     textStyle: const TextStyle(
                       fontFamily: 'Inter',
@@ -190,6 +191,12 @@ class _AccountSetupScreenState extends State<AccountSetupScreen>
                 const SizedBox(height: 12),
                 TextButton(
                   onPressed: () async {
+                    final u = UserService.cachedUser;
+                    await AuthService().recordLastLogin(
+                      username: u?.effectiveName,
+                      email: u?.email,
+                      avatarUrl: u?.avatar,
+                    );
                     await AuthService().clearTokens();
                     UserService.clearCache();
                     if (mounted) {

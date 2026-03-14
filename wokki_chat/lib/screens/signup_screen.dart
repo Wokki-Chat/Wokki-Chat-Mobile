@@ -192,6 +192,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 15),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
+                      side: BorderSide(color: colors.primaryA30, width: 1),
                     ),
                     textStyle: const TextStyle(
                       fontFamily: 'Inter',

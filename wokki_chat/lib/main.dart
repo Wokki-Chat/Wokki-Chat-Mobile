@@ -8,20 +8,34 @@ import 'package:wokki_chat/screens/signup_screen.dart';
 import 'package:wokki_chat/screens/account_setup_screen.dart';
 import 'package:wokki_chat/screens/home_shell.dart';
 import 'package:wokki_chat/theme/app_theme.dart';
+import 'package:wokki_chat/config/app_config.dart';
 import 'dart:io';
 
 class _AllowSelfSigned extends HttpOverrides {
   @override
   HttpClient createHttpClient(SecurityContext? context) {
     return super.createHttpClient(context)
-      ..badCertificateCallback = (_, __, ___) => true;
+      ..badCertificateCallback = (cert, host, port) {
+        if (!AppConfig.allowSelfSigned) return false;
+        final allowedHosts = AppConfig.apiUrl
+            .replaceAll(RegExp(r'https?://'), '')
+            .split(':')
+            .first;
+        final fallbackHost = AppConfig.apiUrlFallback
+            .replaceAll(RegExp(r'https?://'), '')
+            .split(':')
+            .first;
+        return host == allowedHosts || host == fallbackHost;
+      };
   }
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  HttpOverrides.global = _AllowSelfSigned();
   await dotenv.load(fileName: ".env");
+  if (AppConfig.allowSelfSigned) {
+    HttpOverrides.global = _AllowSelfSigned();
+  }
   runApp(const WokkiChatApp());
 }
 
@@ -34,12 +48,24 @@ class WokkiChatApp extends StatelessWidget {
       title: 'Wokki Chat',
       theme: AppTheme.createTheme(AppThemeMode.slate.colors),
       home: const AuthGate(),
-      routes: {
-        '/welcome': (context) => const WelcomeScreen(),
-        '/login': (context) => const LoginScreen(),
-        '/signup': (context) => const SignupScreen(),
-        '/setup': (context) => const AccountSetupScreen(),
-        '/home': (context) => const HomeShell(),
+      onGenerateRoute: (settings) {
+        switch (settings.name) {
+          case '/welcome':
+            return MaterialPageRoute(builder: (_) => const WelcomeScreen());
+          case '/login':
+            final email = settings.arguments as String?;
+            return MaterialPageRoute(
+                builder: (_) => LoginScreen(prefillEmail: email));
+          case '/signup':
+            return MaterialPageRoute(builder: (_) => const SignupScreen());
+          case '/setup':
+            return MaterialPageRoute(
+                builder: (_) => const AccountSetupScreen());
+          case '/home':
+            return MaterialPageRoute(builder: (_) => const HomeShell());
+          default:
+            return null;
+        }
       },
     );
   }
@@ -53,9 +79,8 @@ class AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<AuthGate> {
-  final _authService = AuthService();
   bool _isLoading = true;
-  bool _hasToken = false;
+  Widget? _destination;
 
   @override
   void initState() {
@@ -64,14 +89,32 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Future<void> _checkAuth() async {
-    final hasToken = await _authService.hasAccessToken();
+    final authService = AuthService();
+    final hasToken = await authService.hasAccessToken();
+
+    Widget destination;
+
     if (hasToken) {
-      await UserService.loadCachedUser();
+      final cachedUser = await UserService.loadCachedUser();
+      if (cachedUser != null) {
+        destination = const HomeShell();
+        final token = await authService.getAccessToken();
+        if (token != null) {
+          UserService.fetchMyProfile(token).catchError((_) {});
+        }
+      } else {
+        destination = const AccountSetupScreen();
+      }
+    } else {
+      destination = const WelcomeScreen();
     }
-    setState(() {
-      _hasToken = hasToken;
-      _isLoading = false;
-    });
+
+    if (mounted) {
+      setState(() {
+        _destination = destination;
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -82,6 +125,6 @@ class _AuthGateState extends State<AuthGate> {
         body: const Center(child: CircularProgressIndicator()),
       );
     }
-    return _hasToken ? const AccountSetupScreen() : const WelcomeScreen();
+    return _destination!;
   }
 }

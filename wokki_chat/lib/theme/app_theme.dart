@@ -43,8 +43,8 @@ class AppTheme {
       fontFamily: 'Inter',
       scaffoldBackgroundColor: colors.surfaceA0,
       colorScheme: ColorScheme(
-        brightness: colors.surfaceA0.computeLuminance() > 0.5 
-            ? Brightness.light 
+        brightness: colors.surfaceA0.computeLuminance() > 0.5
+            ? Brightness.light
             : Brightness.dark,
         primary: colors.primaryA0,
         onPrimary: colors.textWhiteA0,
@@ -70,6 +70,14 @@ class AppTheme {
             fontSize: 16,
             fontWeight: FontWeight.w600,
           ),
+        ).copyWith(
+          side: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) {
+              return BorderSide(
+                  color: colors.primaryA30.withOpacity(0.4), width: 1);
+            }
+            return BorderSide(color: colors.primaryA30, width: 1);
+          }),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(

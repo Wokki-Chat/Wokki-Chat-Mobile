@@ -13,6 +13,7 @@ class NotificationsTab extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: colors.surfaceA0,
         elevation: 0,
+        automaticallyImplyLeading: false,
         title: Text(
           'Notifications',
           style: TextStyle(
