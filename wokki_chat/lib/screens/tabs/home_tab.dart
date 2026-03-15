@@ -14,15 +14,6 @@ class HomeTab extends StatelessWidget {
         backgroundColor: colors.surfaceA0,
         elevation: 0,
         automaticallyImplyLeading: false,
-        title: Text(
-          'Wokki Chat',
-          style: TextStyle(
-            fontFamily: 'Inter',
-            fontWeight: FontWeight.w700,
-            fontSize: 20,
-            color: colors.textA0,
-          ),
-        ),
       ),
       body: Center(
         child: Column(
