@@ -32,6 +32,7 @@ class InputField extends StatelessWidget {
   final Widget? suffixIcon;
   final dynamic colors;
   final ValueChanged<String>? onSubmitted;
+  final List<String>? autofillHints;
 
   const InputField({
     super.key,
@@ -46,6 +47,7 @@ class InputField extends StatelessWidget {
     this.obscureText = false,
     this.suffixIcon,
     this.onSubmitted,
+    this.autofillHints,
   });
 
   @override
@@ -58,6 +60,7 @@ class InputField extends StatelessWidget {
       enabled: enabled,
       obscureText: obscureText,
       onSubmitted: onSubmitted,
+      autofillHints: autofillHints,
       style: TextStyle(
         fontFamily: 'Inter',
         fontSize: 15,

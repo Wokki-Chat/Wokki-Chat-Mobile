@@ -66,14 +66,6 @@ class _LoginScreenState extends State<LoginScreen> {
         refreshToken: response['refresh_token'],
       );
 
-      final refreshToken = response['refresh_token'] as String?;
-      if (refreshToken != null && refreshToken.isNotEmpty) {
-        await _authService.saveRefreshTokenForAccount(
-          _emailController.text.trim(),
-          refreshToken,
-        );
-      }
-
       if (mounted) {
         Navigator.pushReplacementNamed(context, '/setup');
       }
@@ -109,138 +101,142 @@ class _LoginScreenState extends State<LoginScreen> {
           behavior: HitTestBehavior.opaque,
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 28),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 12),
-                Text(
-                  'Welcome back',
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    color: colors.textA0,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Log in to continue.',
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 15,
-                    color: colors.textA40,
-                  ),
-                ),
-                const SizedBox(height: 36),
-
-                FieldLabel(label: 'Email', colors: colors),
-                const SizedBox(height: 8),
-                InputField(
-                  controller: _emailController,
-                  focusNode: _emailFocus,
-                  hintText: 'you@example.com',
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  enabled: !_isLoading,
-                  prefixIcon: Icons.email_outlined,
-                  colors: colors,
-                  onSubmitted: (_) =>
-                      FocusScope.of(context).requestFocus(_passwordFocus),
-                ),
-                const SizedBox(height: 20),
-
-                FieldLabel(label: 'Password', colors: colors),
-                const SizedBox(height: 8),
-                InputField(
-                  controller: _passwordController,
-                  focusNode: _passwordFocus,
-                  hintText: '••••••••',
-                  obscureText: _obscurePassword,
-                  textInputAction: TextInputAction.done,
-                  enabled: !_isLoading,
-                  prefixIcon: Icons.lock_outline_rounded,
-                  colors: colors,
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
-                      color: colors.textA40,
-                      size: 20,
-                    ),
-                    onPressed: () =>
-                        setState(() => _obscurePassword = !_obscurePassword),
-                  ),
-                  onSubmitted: (_) => _handleLogin(),
-                ),
-
-                if (_errorMessage != null) ...[
-                  const SizedBox(height: 16),
-                  ErrorBanner(message: _errorMessage!, colors: colors),
-                ],
-
-                const SizedBox(height: 32),
-
-                FilledButton(
-                  onPressed: _isLoading ? null : _handleLogin,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: colors.primaryA0,
-                    disabledBackgroundColor: colors.primaryA0.withOpacity(0.5),
-                    foregroundColor: colors.textWhiteA0,
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      side: BorderSide(color: colors.primaryA30, width: 1),
-                    ),
-                    textStyle: const TextStyle(
+            child: AutofillGroup(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 12),
+                  Text(
+                    'Welcome back',
+                    style: TextStyle(
                       fontFamily: 'Inter',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: colors.textA0,
+                      letterSpacing: -0.5,
                     ),
                   ),
-                  child: _isLoading
-                      ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                                colors.textWhiteA0),
-                          ),
-                        )
-                      : const Text('Log In'),
-                ),
-                const SizedBox(height: 24),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Log in to continue.',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 15,
+                      color: colors.textA40,
+                    ),
+                  ),
+                  const SizedBox(height: 36),
 
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      "Don't have an account? ",
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 14,
+                  FieldLabel(label: 'Email', colors: colors),
+                  const SizedBox(height: 8),
+                  InputField(
+                    controller: _emailController,
+                    focusNode: _emailFocus,
+                    hintText: 'you@example.com',
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    enabled: !_isLoading,
+                    prefixIcon: Icons.email_outlined,
+                    colors: colors,
+                    autofillHints: const [AutofillHints.email],
+                    onSubmitted: (_) =>
+                        FocusScope.of(context).requestFocus(_passwordFocus),
+                  ),
+                  const SizedBox(height: 20),
+
+                  FieldLabel(label: 'Password', colors: colors),
+                  const SizedBox(height: 8),
+                  InputField(
+                    controller: _passwordController,
+                    focusNode: _passwordFocus,
+                    hintText: '••••••••',
+                    obscureText: _obscurePassword,
+                    textInputAction: TextInputAction.done,
+                    enabled: !_isLoading,
+                    prefixIcon: Icons.lock_outline_rounded,
+                    colors: colors,
+                    autofillHints: const [AutofillHints.password],
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
                         color: colors.textA40,
+                        size: 20,
+                      ),
+                      onPressed: () =>
+                          setState(() => _obscurePassword = !_obscurePassword),
+                    ),
+                    onSubmitted: (_) => _handleLogin(),
+                  ),
+
+                  if (_errorMessage != null) ...[
+                    const SizedBox(height: 16),
+                    ErrorBanner(message: _errorMessage!, colors: colors),
+                  ],
+
+                  const SizedBox(height: 32),
+
+                  FilledButton(
+                    onPressed: _isLoading ? null : _handleLogin,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: colors.primaryA0,
+                      disabledBackgroundColor: colors.primaryA0.withOpacity(0.5),
+                      foregroundColor: colors.textWhiteA0,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        side: BorderSide(color: colors.primaryA30, width: 1),
+                      ),
+                      textStyle: const TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    GestureDetector(
-                      onTap: () =>
-                          Navigator.pushReplacementNamed(context, '/signup'),
-                      child: Text(
-                        'Sign up',
+                    child: _isLoading
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                  colors.textWhiteA0),
+                            ),
+                          )
+                        : const Text('Log In'),
+                  ),
+                  const SizedBox(height: 24),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        "Don't have an account? ",
                         style: TextStyle(
                           fontFamily: 'Inter',
                           fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: colors.primaryA0,
+                          color: colors.textA40,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-              ],
+                      GestureDetector(
+                        onTap: () =>
+                            Navigator.pushReplacementNamed(context, '/signup'),
+                        child: Text(
+                          'Sign up',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: colors.primaryA0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                ],
+              ),
             ),
           ),
         ),

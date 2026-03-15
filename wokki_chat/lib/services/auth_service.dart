@@ -43,6 +43,33 @@ class AuthService {
   static String _refreshKey(String email) =>
       'refresh_token_${email.toLowerCase().trim()}';
 
+  Map<String, dynamic>? _decodeJwt(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return null;
+      
+      final payload = parts[1];
+      var normalized = base64Url.normalize(payload);
+      var decoded = utf8.decode(base64Url.decode(normalized));
+      return jsonDecode(decoded) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _isTokenExpired(String token) {
+    final payload = _decodeJwt(token);
+    if (payload == null) return true;
+    
+    final exp = payload['exp'];
+    if (exp == null) return true;
+    
+    final expiryDate = DateTime.fromMillisecondsSinceEpoch(exp * 1000);
+    final now = DateTime.now();
+    
+    return now.isAfter(expiryDate.subtract(const Duration(seconds: 30)));
+  }
+
   Future<bool> hasAccessToken() async {
     final token = await _storage.read(key: _accessTokenKey);
     return token != null && token.isNotEmpty;
@@ -50,6 +77,16 @@ class AuthService {
 
   Future<String?> getAccessToken() async {
     return await _storage.read(key: _accessTokenKey);
+  }
+
+  Future<bool> isAccessTokenValid() async {
+    final token = await getAccessToken();
+    if (token == null) return false;
+    return !_isTokenExpired(token);
+  }
+
+  Future<String?> getRefreshToken() async {
+    return await _storage.read(key: _refreshTokenKey);
   }
 
   Future<void> saveTokens({

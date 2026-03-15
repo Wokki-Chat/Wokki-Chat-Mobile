@@ -74,15 +74,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         refreshToken: response['refresh_token'],
       );
 
-      final newRefresh = response['refresh_token'] as String?;
-      if (newRefresh != null && newRefresh.isNotEmpty) {
-        await authService.saveRefreshTokenForAccount(info.email!, newRefresh);
-      }
-
       if (mounted) {
         Navigator.pushReplacementNamed(context, '/setup');
       }
-    } catch (_) {
+    } catch (e) {
       await authService.deleteRefreshTokenForAccount(info.email!);
       if (mounted) {
         setState(() => _loadingEmail = null);

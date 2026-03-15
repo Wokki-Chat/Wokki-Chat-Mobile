@@ -3,6 +3,7 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:wokki_chat/config/app_config.dart';
 import 'package:wokki_chat/services/device_service.dart';
+import 'package:wokki_chat/services/auth_service.dart';
 
 class ApiService {
   static List<String> get _baseUrls {
@@ -67,6 +68,31 @@ class ApiService {
       }
     }
     throw lastError ?? Exception('All endpoints unreachable');
+  }
+
+  static Future<String?> _ensureValidToken(AuthService authService) async {
+    final accessToken = await authService.getAccessToken();
+    if (accessToken == null) return null;
+
+    if (await authService.isAccessTokenValid()) {
+      return accessToken;
+    }
+
+    final refreshTokenValue = await authService.getRefreshToken();
+    if (refreshTokenValue == null || refreshTokenValue.isEmpty) {
+      return null;
+    }
+
+    try {
+      final response = await ApiService.refreshToken(refreshTokenValue);
+      await authService.saveTokens(
+        accessToken: response['access_token'],
+        refreshToken: response['refresh_token'],
+      );
+      return response['access_token'];
+    } catch (_) {
+      return null;
+    }
   }
 
   static Future<Map<String, dynamic>> loginWithPassword({
@@ -180,11 +206,21 @@ class ApiService {
     required String method,
     required String accessToken,
     Map<String, dynamic>? body,
+    AuthService? authService,
   }) async {
+    String? validToken = accessToken;
+
+    if (authService != null) {
+      validToken = await _ensureValidToken(authService);
+      if (validToken == null) {
+        throw Exception('Session expired - please log in again');
+      }
+    }
+
     final deviceId = await DeviceService.getDeviceId();
     final headers = {
       'Content-Type': 'application/json',
-      'Authorization': 'Bearer $accessToken',
+      'Authorization': 'Bearer $validToken',
       'X-Device-ID': deviceId,
     };
 
@@ -241,7 +277,8 @@ class ApiService {
         }
       } on Exception catch (e) {
         if (e.toString().contains('Unauthorized') ||
-            e.toString().contains('Unsupported HTTP method')) {
+            e.toString().contains('Unsupported HTTP method') ||
+            e.toString().contains('Session expired')) {
           rethrow;
         }
         lastError = e;

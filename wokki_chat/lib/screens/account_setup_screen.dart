@@ -51,14 +51,33 @@ class _AccountSetupScreenState extends State<AccountSetupScreen>
 
     if (UserService.cachedUser != null) {
       if (mounted) Navigator.pushReplacementNamed(context, '/home');
-      UserService.fetchMyProfile(token).catchError((_) {});
+      UserService.fetchMyProfile(token).then((user) {
+        if (user.email != null && user.email!.isNotEmpty) {
+          authService.getRefreshToken().then((refreshToken) {
+            if (refreshToken != null && refreshToken.isNotEmpty) {
+              authService.saveRefreshTokenForAccount(user.email!, refreshToken);
+            }
+          });
+        }
+      }).catchError((_) {});
       return;
     }
-
+    
     if (mounted) setState(() => _statusText = 'Fetching your profile…');
 
     try {
-      await UserService.fetchMyProfile(token);
+      final user = await UserService.fetchMyProfile(token);
+      
+      if (user.email != null && user.email!.isNotEmpty) {
+        final refreshToken = await authService.getRefreshToken();
+        if (refreshToken != null && refreshToken.isNotEmpty) {
+          await authService.saveRefreshTokenForAccount(
+            user.email!,
+            refreshToken,
+          );
+        }
+      }
+      
       if (mounted) {
         setState(() => _statusText = 'All done!');
         await Future.delayed(const Duration(milliseconds: 350));
@@ -66,9 +85,47 @@ class _AccountSetupScreenState extends State<AccountSetupScreen>
       }
     } catch (e) {
       final msg = e.toString();
-      if (msg.contains('Unauthorized')) {
+      final isConnectionError = msg.contains('SocketException') ||
+          msg.contains('Connection') ||
+          msg.contains('TimeoutException') ||
+          msg.contains('Failed host lookup');
+
+      if (msg.contains('Unauthorized') || msg.contains('Session expired')) {
         await authService.clearTokens();
         if (mounted) Navigator.pushReplacementNamed(context, '/welcome');
+      } else if (isConnectionError) {
+        if (mounted) {
+          setState(() => _statusText = 'Switching to backup server…');
+          await Future.delayed(const Duration(milliseconds: 800));
+        }
+
+        try {
+          final user = await UserService.fetchMyProfile(token);
+          
+          if (user.email != null && user.email!.isNotEmpty) {
+            final refreshToken = await authService.getRefreshToken();
+            if (refreshToken != null && refreshToken.isNotEmpty) {
+              await authService.saveRefreshTokenForAccount(
+                user.email!,
+                refreshToken,
+              );
+            }
+          }
+          
+          if (mounted) {
+            setState(() => _statusText = 'All done!');
+            await Future.delayed(const Duration(milliseconds: 350));
+            Navigator.pushReplacementNamed(context, '/home');
+          }
+        } catch (retryError) {
+          if (mounted) {
+            setState(() {
+              _isError = true;
+              _statusText = 'Unable to connect to server';
+              _errorDetail = retryError.toString().replaceAll('Exception: ', '');
+            });
+          }
+        }
       } else {
         if (mounted) {
           setState(() {

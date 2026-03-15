@@ -95,153 +95,158 @@ class _SignupScreenState extends State<SignupScreen> {
           behavior: HitTestBehavior.opaque,
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 28),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 12),
-                Text(
-                  'Create account',
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    color: colors.textA0,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Sign up to get started.',
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 15,
-                    color: colors.textA40,
-                  ),
-                ),
-                const SizedBox(height: 36),
-
-                FieldLabel(label: 'Display Name', colors: colors),
-                const SizedBox(height: 8),
-                InputField(
-                  controller: _nameController,
-                  focusNode: _nameFocus,
-                  hintText: 'Your name',
-                  textInputAction: TextInputAction.next,
-                  enabled: !_isLoading,
-                  prefixIcon: Icons.person_outline_rounded,
-                  colors: colors,
-                  onSubmitted: (_) =>
-                      FocusScope.of(context).requestFocus(_emailFocus),
-                ),
-                const SizedBox(height: 20),
-
-                FieldLabel(label: 'Email', colors: colors),
-                const SizedBox(height: 8),
-                InputField(
-                  controller: _emailController,
-                  focusNode: _emailFocus,
-                  hintText: 'you@example.com',
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  enabled: !_isLoading,
-                  prefixIcon: Icons.email_outlined,
-                  colors: colors,
-                  onSubmitted: (_) =>
-                      FocusScope.of(context).requestFocus(_passwordFocus),
-                ),
-                const SizedBox(height: 20),
-
-                FieldLabel(label: 'Password', colors: colors),
-                const SizedBox(height: 8),
-                InputField(
-                  controller: _passwordController,
-                  focusNode: _passwordFocus,
-                  hintText: '••••••••',
-                  obscureText: _obscurePassword,
-                  textInputAction: TextInputAction.done,
-                  enabled: !_isLoading,
-                  prefixIcon: Icons.lock_outline_rounded,
-                  colors: colors,
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
-                      color: colors.textA40,
-                      size: 20,
-                    ),
-                    onPressed: () =>
-                        setState(() => _obscurePassword = !_obscurePassword),
-                  ),
-                  onSubmitted: (_) => _handleSignup(),
-                ),
-
-                if (_errorMessage != null) ...[
-                  const SizedBox(height: 16),
-                  ErrorBanner(message: _errorMessage!, colors: colors),
-                ],
-
-                const SizedBox(height: 32),
-
-                FilledButton(
-                  onPressed: _isLoading ? null : _handleSignup,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: colors.primaryA0,
-                    disabledBackgroundColor: colors.primaryA0.withOpacity(0.5),
-                    foregroundColor: colors.textWhiteA0,
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      side: BorderSide(color: colors.primaryA30, width: 1),
-                    ),
-                    textStyle: const TextStyle(
+            child: AutofillGroup(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 12),
+                  Text(
+                    'Create account',
+                    style: TextStyle(
                       fontFamily: 'Inter',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: colors.textA0,
+                      letterSpacing: -0.5,
                     ),
                   ),
-                  child: _isLoading
-                      ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                                colors.textWhiteA0),
-                          ),
-                        )
-                      : const Text('Create Account'),
-                ),
-                const SizedBox(height: 24),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Sign up to get started.',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 15,
+                      color: colors.textA40,
+                    ),
+                  ),
+                  const SizedBox(height: 36),
 
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Already have an account? ',
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 14,
+                  FieldLabel(label: 'Display Name', colors: colors),
+                  const SizedBox(height: 8),
+                  InputField(
+                    controller: _nameController,
+                    focusNode: _nameFocus,
+                    hintText: 'Your name',
+                    textInputAction: TextInputAction.next,
+                    enabled: !_isLoading,
+                    prefixIcon: Icons.person_outline_rounded,
+                    colors: colors,
+                    autofillHints: const [AutofillHints.name],
+                    onSubmitted: (_) =>
+                        FocusScope.of(context).requestFocus(_emailFocus),
+                  ),
+                  const SizedBox(height: 20),
+
+                  FieldLabel(label: 'Email', colors: colors),
+                  const SizedBox(height: 8),
+                  InputField(
+                    controller: _emailController,
+                    focusNode: _emailFocus,
+                    hintText: 'you@example.com',
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    enabled: !_isLoading,
+                    prefixIcon: Icons.email_outlined,
+                    colors: colors,
+                    autofillHints: const [AutofillHints.email],
+                    onSubmitted: (_) =>
+                        FocusScope.of(context).requestFocus(_passwordFocus),
+                  ),
+                  const SizedBox(height: 20),
+
+                  FieldLabel(label: 'Password', colors: colors),
+                  const SizedBox(height: 8),
+                  InputField(
+                    controller: _passwordController,
+                    focusNode: _passwordFocus,
+                    hintText: '••••••••',
+                    obscureText: _obscurePassword,
+                    textInputAction: TextInputAction.done,
+                    enabled: !_isLoading,
+                    prefixIcon: Icons.lock_outline_rounded,
+                    colors: colors,
+                    autofillHints: const [AutofillHints.newPassword],
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
                         color: colors.textA40,
+                        size: 20,
+                      ),
+                      onPressed: () =>
+                          setState(() => _obscurePassword = !_obscurePassword),
+                    ),
+                    onSubmitted: (_) => _handleSignup(),
+                  ),
+
+                  if (_errorMessage != null) ...[
+                    const SizedBox(height: 16),
+                    ErrorBanner(message: _errorMessage!, colors: colors),
+                  ],
+
+                  const SizedBox(height: 32),
+
+                  FilledButton(
+                    onPressed: _isLoading ? null : _handleSignup,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: colors.primaryA0,
+                      disabledBackgroundColor: colors.primaryA0.withOpacity(0.5),
+                      foregroundColor: colors.textWhiteA0,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        side: BorderSide(color: colors.primaryA30, width: 1),
+                      ),
+                      textStyle: const TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    GestureDetector(
-                      onTap: () =>
-                          Navigator.pushReplacementNamed(context, '/login'),
-                      child: Text(
-                        'Log in',
+                    child: _isLoading
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                  colors.textWhiteA0),
+                            ),
+                          )
+                        : const Text('Create Account'),
+                  ),
+                  const SizedBox(height: 24),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Already have an account? ',
                         style: TextStyle(
                           fontFamily: 'Inter',
                           fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: colors.primaryA0,
+                          color: colors.textA40,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-              ],
+                      GestureDetector(
+                        onTap: () =>
+                            Navigator.pushReplacementNamed(context, '/login'),
+                        child: Text(
+                          'Log in',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: colors.primaryA0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                ],
+              ),
             ),
           ),
         ),
