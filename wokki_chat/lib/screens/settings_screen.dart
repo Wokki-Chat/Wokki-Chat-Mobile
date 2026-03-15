@@ -306,8 +306,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 13),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(
-                            color: colors.dangerA10.withOpacity(0.4)),
+                      ),
+                    ).copyWith(
+                      side: WidgetStateProperty.all(
+                        BorderSide(color: colors.dangerA10.withOpacity(0.4)),
                       ),
                     ),
                     child: const Text(

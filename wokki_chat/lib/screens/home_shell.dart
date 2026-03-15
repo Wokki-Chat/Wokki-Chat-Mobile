@@ -84,9 +84,9 @@ class _HomeShellState extends State<HomeShell> with ThemeAware<HomeShell>, Singl
               ),
               Container(
                 decoration: BoxDecoration(
-                  color: colors.surfaceA10,
+                  color: colors.popupA0,
                   border: Border(
-                    top: BorderSide(color: colors.surfaceA20, width: 1),
+                    top: BorderSide(color: colors.popupA10, width: 1),
                   ),
                 ),
                 padding: EdgeInsets.only(
