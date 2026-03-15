@@ -1,58 +1,78 @@
-import 'package:flutter/material.dart';
-import 'package:wokki_chat/models/server_model.dart';
+import 'package:flutter/foundation.dart';
 
 class ChatOverlayState {
-  final ServerModel? server;
-  final ChannelModel? channel;
   final bool visible;
+  final String? server;
+  final String? channel;
+  final String? userId;
+  final List<Map<String, dynamic>>? channels;
+  final List<Map<String, dynamic>>? users;
   final double dragValue;
 
   const ChatOverlayState({
+    this.visible = false,
     this.server,
     this.channel,
-    this.visible = false,
+    this.userId,
+    this.channels,
+    this.users,
     this.dragValue = 0.0,
   });
+
+  ChatOverlayState copyWith({
+    bool? visible,
+    String? server,
+    String? channel,
+    String? userId,
+    List<Map<String, dynamic>>? channels,
+    List<Map<String, dynamic>>? users,
+    double? dragValue,
+  }) {
+    return ChatOverlayState(
+      visible: visible ?? this.visible,
+      server: server ?? this.server,
+      channel: channel ?? this.channel,
+      userId: userId ?? this.userId,
+      channels: channels ?? this.channels,
+      users: users ?? this.users,
+      dragValue: dragValue ?? this.dragValue,
+    );
+  }
 }
 
 class ChatOverlayNotifier extends ValueNotifier<ChatOverlayState> {
   ChatOverlayNotifier() : super(const ChatOverlayState());
 
-  void show(ServerModel server, ChannelModel channel) {
+  void show({
+    required String server,
+    required String channel,
+    String? userId,
+    List<Map<String, dynamic>>? channels,
+    List<Map<String, dynamic>>? users,
+  }) {
     value = ChatOverlayState(
+      visible: true,
       server: server,
       channel: channel,
-      visible: true,
-      dragValue: value.dragValue,
+      userId: userId,
+      channels: channels,
+      users: users,
     );
   }
 
   void hide() {
-    value = ChatOverlayState(
-      server: value.server,
-      channel: value.channel,
-      visible: false,
-      dragValue: 0.0,
-    );
+    value = value.copyWith(visible: false, dragValue: 0.0);
   }
 
-  set dragValue(double v) {
-    value = ChatOverlayState(
-      server: value.server,
-      channel: value.channel,
-      visible: value.visible,
-      dragValue: v,
-    );
+  void updateDragValue(double dragValue) {
+    value = value.copyWith(dragValue: dragValue);
   }
 
-  double get dragValue => value.dragValue;
+  void updateUsers(List<Map<String, dynamic>> users) {
+    value = value.copyWith(users: users);
+  }
 
-  void cancelDrag() {
-    value = ChatOverlayState(
-      server: value.server,
-      channel: value.channel,
-      visible: false,
-      dragValue: 0.0,
-    );
+  void updateChannels(List<Map<String, dynamic>> channels) {
+    value = value.copyWith(channels: channels);
   }
 }

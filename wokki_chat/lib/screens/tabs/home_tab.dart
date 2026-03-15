@@ -30,6 +30,7 @@ class _HomeTabState extends State<HomeTab> {
   bool _disposed = false;
   final _socketService = SocketService();
   String? _accessToken;
+  String? _userId;
 
   @override
   void initState() {
@@ -54,6 +55,7 @@ class _HomeTabState extends State<HomeTab> {
       final token = await authService.getAccessToken();
       if (token != null && token.isNotEmpty) {
         _accessToken = token;
+        _userId = await authService.getUserId();
         _socketService.connect(token);
       }
     } catch (_) {}
@@ -260,11 +262,12 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   void _openChat() {
-    if (_selectedServer != null && _selectedChannelId != null) {
-      final channel = _findChannel(_selectedServer!, _selectedChannelId!);
-      if (channel != null) {
-        widget.overlayNotifier.show(_selectedServer!, channel);
-      }
+    if (_selectedServer != null && _selectedChannelId != null && _userId != null) {
+      widget.overlayNotifier.show(
+        server: _selectedServer!.id,
+        channel: _selectedChannelId!,
+        userId: _userId!,
+      );
     }
   }
 
@@ -363,16 +366,16 @@ class _HomeTabState extends State<HomeTab> {
         onHorizontalDragUpdate: (details) {
           if (!hasChannelSelected) return;
           final delta = details.delta.dx / MediaQuery.of(context).size.width;
-          widget.overlayNotifier.dragValue =
-              (widget.overlayNotifier.dragValue - delta).clamp(0.0, 1.0);
+          widget.overlayNotifier.updateDragValue(
+              (widget.overlayNotifier.value.dragValue - delta).clamp(0.0, 1.0));
         },
         onHorizontalDragEnd: (details) {
           if (!hasChannelSelected) return;
           final velocity = details.primaryVelocity ?? 0;
-          if (velocity < -300 || widget.overlayNotifier.dragValue > 0.5) {
+          if (velocity < -300 || widget.overlayNotifier.value.dragValue > 0.5) {
             _openChat();
           } else {
-            widget.overlayNotifier.cancelDrag();
+            widget.overlayNotifier.hide();
           }
         },
         child: sidebarContent,

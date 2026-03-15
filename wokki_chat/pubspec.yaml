@@ -15,6 +15,17 @@ dependencies:
   shared_preferences: ^2.3.0
   crypto: ^3.0.0
   socket_io_client: ^2.0.3+1
+  cached_network_image: ^3.3.1
+  flutter_slidable: ^3.0.1
+  shimmer: ^3.0.0
+  emoji_picker_flutter: ^2.0.0
+  url_launcher: ^6.2.4
+  flutter_highlight: ^0.7.0
+  photo_view: ^0.14.0
+  dio: ^5.4.0
+  path_provider: ^2.1.2
+  share_plus: ^7.2.1
+  intl: ^0.19.0
  
 dev_dependencies:
   flutter_test:
@@ -36,6 +47,7 @@ flutter:
     - .env
     - assets/icon/logo.png
     - assets/icon/icon.png
+    - assets/images/
   fonts:
     - family: Inter
       fonts:

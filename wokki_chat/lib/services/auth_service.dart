@@ -71,6 +71,15 @@ class AuthService {
     return valid;
   }
 
+  Future<String?> getUserId() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('user_id');
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<String?> getRefreshToken() async {
     return await _storage.read(key: _refreshTokenKey);
   }

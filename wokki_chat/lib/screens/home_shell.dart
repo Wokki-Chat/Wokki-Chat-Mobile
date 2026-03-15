@@ -146,11 +146,14 @@ class _HomeShellState extends State<HomeShell> with ThemeAware<HomeShell>, Singl
                 },
                 child: SlideTransition(
                   position: _slideAnimation,
-                  child: ChatScreen(
-                    server: state.server!,
-                    channel: state.channel!,
-                    onShowSidebar: _closeOverlay,
-                  ),
+                    child: ChatScreen(
+                      serverId: state.server!,
+                      channelId: state.channel!,
+                      userId: state.userId,
+                      channels: state.channels ?? [],
+                      users: state.users ?? [],
+                      onShowSidebar: _closeOverlay,
+                    ),
                 ),
               );
             },
