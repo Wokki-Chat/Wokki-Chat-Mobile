@@ -34,6 +34,7 @@ flutter:
   assets:
     - .env
     - assets/icon/logo.png
+    - assets/icon/icon.png
   fonts:
     - family: Inter
       fonts:
