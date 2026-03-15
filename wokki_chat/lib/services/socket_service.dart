@@ -24,27 +24,28 @@ class SocketService {
 
     developer.log('[SOCKET] Connecting to $url', name: 'SocketService');
 
-    final options = <String, dynamic>{
-      'transports': ['websocket'],
-      'autoConnect': false,
-      'query': {'access_token': accessToken},
-    };
+    _socket?.dispose();
+    _socket = null;
 
-    if (AppConfig.allowSelfSigned) {
-      options['extraHeaders'] = <String, String>{};
-      options['rejectUnauthorized'] = false;
-    }
+    final opts = io.OptionBuilder()
+        .setTransports(['websocket'])
+        .disableAutoConnect()
+        .setQuery({'access_token': accessToken})
+        .setReconnectionDelay(2000)
+        .setReconnectionDelayMax(10000)
+        .enableReconnection()
+        .build();
 
-    _socket = io.io(url, options);
+    _socket = io.io(url, opts);
 
     _socket!.onConnect((_) {
       _isConnected = true;
       developer.log('[SOCKET] Connected', name: 'SocketService');
     });
 
-    _socket!.onDisconnect((_) {
+    _socket!.onDisconnect((reason) {
       _isConnected = false;
-      developer.log('[SOCKET] Disconnected', name: 'SocketService');
+      developer.log('[SOCKET] Disconnected: $reason', name: 'SocketService');
     });
 
     _socket!.onConnectError((data) {
@@ -53,6 +54,10 @@ class SocketService {
 
     _socket!.onError((data) {
       developer.log('[SOCKET] Error: $data', name: 'SocketService');
+    });
+
+    _socket!.onReconnect((_) {
+      developer.log('[SOCKET] Reconnected', name: 'SocketService');
     });
 
     _socket!.connect();
@@ -90,7 +95,7 @@ class SocketService {
   }
 
   void disconnect() {
-    _socket?.disconnect();
+    _socket?.dispose();
     _socket = null;
     _isConnected = false;
     developer.log('[SOCKET] Manually disconnected', name: 'SocketService');
