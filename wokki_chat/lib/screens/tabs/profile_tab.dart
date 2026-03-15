@@ -2,16 +2,48 @@ import 'package:flutter/material.dart';
 import 'package:wokki_chat/services/auth_service.dart';
 import 'package:wokki_chat/services/user_service.dart';
 import 'package:wokki_chat/services/server_service.dart';
+import 'package:wokki_chat/services/background_sync.dart';
 import 'package:wokki_chat/models/user_model.dart';
 import 'package:wokki_chat/theme/app_theme.dart';
 
-class ProfileTab extends StatelessWidget {
+class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
+
+  @override
+  State<ProfileTab> createState() => _ProfileTabState();
+}
+
+class _ProfileTabState extends State<ProfileTab> {
+  UserModel? _user;
+  bool _disposed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _user = UserService.cachedUser;
+    _backgroundRefresh();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
+  Future<void> _backgroundRefresh() async {
+    try {
+      if (_disposed) return;
+      final result = await BackgroundSync.run();
+      if (_disposed || !mounted) return;
+      if (result.user != null) {
+        setState(() => _user = result.user);
+      }
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
     final colors = AppThemeMode.slate.colors;
-    final user = UserService.cachedUser;
 
     return Scaffold(
       backgroundColor: colors.surfaceA0,
@@ -48,14 +80,14 @@ class ProfileTab extends StatelessWidget {
           ),
         ],
       ),
-      body: user == null
+      body: _user == null
           ? Center(
               child: Text(
                 'No profile data',
                 style: TextStyle(color: colors.textA40, fontFamily: 'Inter'),
               ),
             )
-          : _ProfileContent(user: user, colors: colors),
+          : _ProfileContent(user: _user!, colors: colors),
     );
   }
 }

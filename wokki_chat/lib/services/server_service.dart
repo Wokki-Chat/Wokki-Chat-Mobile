@@ -3,8 +3,6 @@ import 'package:http/http.dart' as http;
 import 'package:wokki_chat/config/app_config.dart';
 import 'package:wokki_chat/models/server_model.dart';
 import 'package:wokki_chat/services/device_service.dart';
-import 'package:wokki_chat/services/auth_service.dart';
-import 'package:wokki_chat/services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ServerService {
@@ -77,28 +75,8 @@ class ServerService {
     } catch (_) {}
   }
 
-  static Future<List<ServerModel>> fetchMyServers(String accessToken) async {
-    final authService = AuthService();
+  static Future<List<ServerModel>> fetchMyServers(String validToken) async {
     final deviceId = await DeviceService.getDeviceId();
-    
-    String? validToken = accessToken;
-    if (!(await authService.isAccessTokenValid())) {
-      final refreshToken = await authService.getRefreshToken();
-      if (refreshToken != null && refreshToken.isNotEmpty) {
-        try {
-          final response = await ApiService.refreshToken(refreshToken);
-          await authService.saveTokens(
-            accessToken: response['access_token'],
-            refreshToken: response['refresh_token'],
-          );
-          validToken = response['access_token'];
-        } catch (_) {
-          throw Exception('Session expired - please log in again');
-        }
-      } else {
-        throw Exception('Session expired - please log in again');
-      }
-    }
 
     final headers = {
       'Content-Type': 'application/json',
@@ -128,10 +106,8 @@ class ServerService {
           _cachedServers = servers;
           await _persistServers(servers);
           return servers;
-
         } else if (response.statusCode == 401) {
           throw Exception('Unauthorized');
-
         } else {
           String msg;
           try {
@@ -143,7 +119,7 @@ class ServerService {
           lastError = Exception(msg);
         }
       } catch (e) {
-        if (e.toString().contains('Unauthorized') || 
+        if (e.toString().contains('Unauthorized') ||
             e.toString().contains('Session expired')) rethrow;
         lastError = e is Exception ? e : Exception(e.toString());
       }

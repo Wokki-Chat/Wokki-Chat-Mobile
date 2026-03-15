@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wokki_chat/theme/app_theme.dart';
 import 'package:wokki_chat/services/server_service.dart';
-import 'package:wokki_chat/services/auth_service.dart';
+import 'package:wokki_chat/services/background_sync.dart';
 import 'package:wokki_chat/models/server_model.dart';
 
 const _kLastServerId = 'last_server_id';
@@ -21,11 +21,22 @@ class _HomeTabState extends State<HomeTab> {
   ServerModel? _selectedServer;
   String? _selectedChannelId;
   final Set<String> _collapsedGroups = {};
+  bool _disposed = false;
 
   @override
   void initState() {
     super.initState();
     _loadServers();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
+  void _safeSetState(VoidCallback fn) {
+    if (!_disposed && mounted) setState(fn);
   }
 
   List<ServerModel> _sortedServers(List<ServerModel> servers) {
@@ -50,82 +61,142 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   Future<void> _saveLastServerId(String? serverId) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (serverId == null) {
-      await prefs.remove(_kLastServerId);
-    } else {
-      await prefs.setString(_kLastServerId, serverId);
-    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (serverId == null) {
+        await prefs.remove(_kLastServerId);
+      } else {
+        await prefs.setString(_kLastServerId, serverId);
+      }
+    } catch (_) {}
   }
 
   Future<void> _saveLastChannelId(String serverId, String? channelId) async {
-    final prefs = await SharedPreferences.getInstance();
-    final key = '$_kLastChannelPrefix$serverId';
-    if (channelId == null) {
-      await prefs.remove(key);
-    } else {
-      await prefs.setString(key, channelId);
-    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = '$_kLastChannelPrefix$serverId';
+      if (channelId == null) {
+        await prefs.remove(key);
+      } else {
+        await prefs.setString(key, channelId);
+      }
+    } catch (_) {}
   }
 
   Future<String?> _getLastServerId() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_kLastServerId);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_kLastServerId);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<String?> _getLastChannelId(String serverId) async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('$_kLastChannelPrefix$serverId');
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('$_kLastChannelPrefix$serverId');
+    } catch (_) {
+      return null;
+    }
   }
 
   String? _resolveChannelForServer(ServerModel server, String? lastChannelId) {
-    final allChannels = server.channelGroups
-        .expand((g) => g.channels)
-        .toList();
-
+    final allChannels = server.channelGroups.expand((g) => g.channels).toList();
     if (lastChannelId != null) {
       final match = allChannels.where((c) => c.id == lastChannelId).firstOrNull;
       if (match != null) return match.id;
     }
-
     final defaultChannel = allChannels.where((c) => c.isDefault == 1).firstOrNull;
     if (defaultChannel != null) return defaultChannel.id;
-
     return null;
   }
 
   Future<void> _loadServers() async {
-    final cachedServers = await ServerService.loadCachedServers();
+    List<ServerModel>? cachedServers;
+    try {
+      cachedServers = await ServerService.loadCachedServers();
+    } catch (_) {}
 
     if (cachedServers != null && cachedServers.isNotEmpty) {
-      if (mounted) {
+      if (!_disposed && mounted) {
         final sorted = _sortedServers(cachedServers);
         await _applyInitialSelection(sorted);
       }
+      _backgroundRefresh();
       return;
     }
 
-    if (mounted) setState(() => _isLoading = true);
+    _safeSetState(() => _isLoading = true);
 
     try {
-      final token = await AuthService().getAccessToken();
-      if (token != null) {
-        final servers = await ServerService.fetchMyServers(token);
-        if (mounted) {
-          final sorted = _sortedServers(servers);
-          setState(() => _isLoading = false);
-          await _applyInitialSelection(sorted);
-        }
+      final result = await BackgroundSync.run();
+      if (_disposed) return;
+      if (result.servers != null) {
+        final sorted = _sortedServers(result.servers!);
+        _safeSetState(() => _isLoading = false);
+        await _applyInitialSelection(sorted);
+      } else {
+        _safeSetState(() => _isLoading = false);
       }
-    } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+    } catch (_) {
+      _safeSetState(() => _isLoading = false);
     }
   }
 
+  Future<void> _backgroundRefresh() async {
+    try {
+      if (_disposed) return;
+      final result = await BackgroundSync.run();
+      if (_disposed) return;
+      if (result.servers != null) {
+        _applyBackgroundUpdate(_sortedServers(result.servers!));
+      }
+    } catch (_) {}
+  }
+
+  void _applyBackgroundUpdate(List<ServerModel> freshServers) {
+    if (_disposed || !mounted) return;
+
+    final currentServerId = _selectedServer?.id;
+    final currentChannelId = _selectedChannelId;
+
+    ServerModel? updatedSelectedServer;
+    String? updatedChannelId = currentChannelId;
+
+    if (currentServerId != null) {
+      updatedSelectedServer =
+          freshServers.where((s) => s.id == currentServerId).firstOrNull;
+
+      if (updatedSelectedServer != null && currentChannelId != null) {
+        final allChannels = updatedSelectedServer.channelGroups
+            .expand((g) => g.channels)
+            .toList();
+        final channelStillExists = allChannels.any((c) => c.id == currentChannelId);
+        if (!channelStillExists) {
+          updatedChannelId = _resolveChannelForServer(updatedSelectedServer, null);
+        }
+      }
+    }
+
+    _safeSetState(() {
+      _servers = freshServers;
+      if (currentServerId != null && updatedSelectedServer == null) {
+        _selectedServer = null;
+        _selectedChannelId = null;
+        _saveLastServerId(null);
+      } else {
+        _selectedServer = updatedSelectedServer;
+        _selectedChannelId = updatedChannelId;
+      }
+    });
+  }
+
   Future<void> _applyInitialSelection(List<ServerModel> sorted) async {
-    if (!mounted) return;
+    if (_disposed || !mounted) return;
 
     final lastServerId = await _getLastServerId();
+    if (_disposed || !mounted) return;
 
     ServerModel? server;
     if (lastServerId != null) {
@@ -135,42 +206,38 @@ class _HomeTabState extends State<HomeTab> {
     String? channelId;
     if (server != null) {
       final lastChannelId = await _getLastChannelId(server.id);
+      if (_disposed || !mounted) return;
       channelId = _resolveChannelForServer(server, lastChannelId);
     }
 
-    if (mounted) {
-      setState(() {
-        _servers = sorted;
-        _selectedServer = server;
-        _selectedChannelId = channelId;
-      });
-    }
+    _safeSetState(() {
+      _servers = sorted;
+      _selectedServer = server;
+      _selectedChannelId = channelId;
+    });
   }
 
   void _onServerTap(ServerModel server) async {
     final lastChannelId = await _getLastChannelId(server.id);
+    if (_disposed || !mounted) return;
     final channelId = _resolveChannelForServer(server, lastChannelId);
-
     await _saveLastServerId(server.id);
-
-    if (mounted) {
-      setState(() {
-        _selectedServer = server;
-        _selectedChannelId = channelId;
-      });
-    }
+    _safeSetState(() {
+      _selectedServer = server;
+      _selectedChannelId = channelId;
+    });
   }
 
   void _onChannelTap(String channelId) async {
     if (_selectedServer != null) {
       await _saveLastChannelId(_selectedServer!.id, channelId);
     }
-    setState(() => _selectedChannelId = channelId);
+    _safeSetState(() => _selectedChannelId = channelId);
   }
 
   void _onLogoTap() async {
     await _saveLastServerId(null);
-    setState(() {
+    _safeSetState(() {
       _selectedServer = null;
       _selectedChannelId = null;
     });
@@ -202,7 +269,7 @@ class _HomeTabState extends State<HomeTab> {
                 sortedGroups: _sortedGroups,
                 sortedChannels: _sortedChannels,
                 onToggleGroup: (groupId) {
-                  setState(() {
+                  _safeSetState(() {
                     if (_collapsedGroups.contains(groupId)) {
                       _collapsedGroups.remove(groupId);
                     } else {
@@ -309,8 +376,7 @@ class _ServerBar extends StatelessWidget {
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(colors.primaryA0),
+                      valueColor: AlwaysStoppedAnimation<Color>(colors.primaryA0),
                     ),
                   ),
                 ),
@@ -461,8 +527,7 @@ class _ChannelSidebar extends StatelessWidget {
           children: [
             Container(
               width: double.infinity,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               decoration: BoxDecoration(
                 border: Border(
                   bottom: BorderSide(color: colors.surfaceA20, width: 1),

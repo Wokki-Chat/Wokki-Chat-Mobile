@@ -15,6 +15,7 @@ class _AccountSetupScreenState extends State<AccountSetupScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
+  bool _disposed = false;
 
   String _statusText = 'Setting up your account…';
   String? _errorDetail;
@@ -33,63 +34,51 @@ class _AccountSetupScreenState extends State<AccountSetupScreen>
     _setup();
   }
 
+  @override
+  void dispose() {
+    _disposed = true;
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  void _safeSetState(VoidCallback fn) {
+    if (!_disposed && mounted) setState(fn);
+  }
+
   Future<void> _setup() async {
-    if (mounted) {
-      setState(() {
-        _isError = false;
-        _errorDetail = null;
-        _statusText = 'Setting up your account…';
-      });
-    }
+    _safeSetState(() {
+      _isError = false;
+      _errorDetail = null;
+      _statusText = 'Setting up your account…';
+    });
 
     final authService = AuthService();
-    final token = await authService.getAccessToken();
+    String? token;
+    try {
+      token = await authService.getAccessToken();
+    } catch (_) {}
 
     if (token == null) {
-      if (mounted) Navigator.pushReplacementNamed(context, '/welcome');
+      if (!_disposed && mounted) {
+        Navigator.pushReplacementNamed(context, '/welcome');
+      }
       return;
     }
 
     if (UserService.cachedUser != null) {
-      if (mounted) Navigator.pushReplacementNamed(context, '/home');
-      UserService.fetchMyProfile(token).then((user) {
-        if (user.email != null && user.email!.isNotEmpty) {
-          authService.getRefreshToken().then((refreshToken) {
-            if (refreshToken != null && refreshToken.isNotEmpty) {
-              authService.saveRefreshTokenForAccount(user.email!, refreshToken);
-            }
-          });
-        }
-      }).catchError((_) {});
-      ServerService.fetchMyServers(token).catchError((_) {});
-      return;
-    }
-    
-    if (mounted) setState(() => _statusText = 'Fetching your profile…');
-
-    try {
-      final user = await UserService.fetchMyProfile(token);
-      
-      if (user.email != null && user.email!.isNotEmpty) {
-        final refreshToken = await authService.getRefreshToken();
-        if (refreshToken != null && refreshToken.isNotEmpty) {
-          await authService.saveRefreshTokenForAccount(
-            user.email!,
-            refreshToken,
-          );
-        }
-      }
-      
-      if (mounted) setState(() => _statusText = 'Loading your servers…');
-      
-      await ServerService.fetchMyServers(token);
-      
-      if (mounted) {
-        setState(() => _statusText = 'All done!');
-        await Future.delayed(const Duration(milliseconds: 350));
+      if (!_disposed && mounted) {
         Navigator.pushReplacementNamed(context, '/home');
       }
+      _backgroundPostSetup(token, authService);
+      return;
+    }
+
+    _safeSetState(() => _statusText = 'Fetching your profile…');
+
+    try {
+      await _fetchAndNavigate(token, authService);
     } catch (e) {
+      if (_disposed) return;
       final msg = e.toString();
       final isConnectionError = msg.contains('SocketException') ||
           msg.contains('Connection') ||
@@ -97,61 +86,82 @@ class _AccountSetupScreenState extends State<AccountSetupScreen>
           msg.contains('Failed host lookup');
 
       if (msg.contains('Unauthorized') || msg.contains('Session expired')) {
-        await authService.clearTokens();
-        if (mounted) Navigator.pushReplacementNamed(context, '/welcome');
-      } else if (isConnectionError) {
-        if (mounted) {
-          setState(() => _statusText = 'Switching to backup server…');
-          await Future.delayed(const Duration(milliseconds: 800));
+        try {
+          await authService.clearTokens();
+        } catch (_) {}
+        if (!_disposed && mounted) {
+          Navigator.pushReplacementNamed(context, '/welcome');
         }
+      } else if (isConnectionError) {
+        _safeSetState(() => _statusText = 'Switching to backup server…');
+        await Future.delayed(const Duration(milliseconds: 800));
+        if (_disposed) return;
 
         try {
-          final user = await UserService.fetchMyProfile(token);
-          
-          if (user.email != null && user.email!.isNotEmpty) {
-            final refreshToken = await authService.getRefreshToken();
-            if (refreshToken != null && refreshToken.isNotEmpty) {
-              await authService.saveRefreshTokenForAccount(
-                user.email!,
-                refreshToken,
-              );
-            }
-          }
-          
-          if (mounted) setState(() => _statusText = 'Loading your servers…');
-          
-          await ServerService.fetchMyServers(token);
-          
-          if (mounted) {
-            setState(() => _statusText = 'All done!');
-            await Future.delayed(const Duration(milliseconds: 350));
-            Navigator.pushReplacementNamed(context, '/home');
-          }
+          await _fetchAndNavigate(token, authService);
         } catch (retryError) {
-          if (mounted) {
-            setState(() {
-              _isError = true;
-              _statusText = 'Unable to connect to server';
-              _errorDetail = retryError.toString().replaceAll('Exception: ', '');
-            });
-          }
-        }
-      } else {
-        if (mounted) {
-          setState(() {
+          _safeSetState(() {
             _isError = true;
-            _statusText = 'Something went wrong';
-            _errorDetail = msg.replaceAll('Exception: ', '');
+            _statusText = 'Unable to connect to server';
+            _errorDetail =
+                retryError.toString().replaceAll('Exception: ', '');
           });
         }
+      } else {
+        _safeSetState(() {
+          _isError = true;
+          _statusText = 'Something went wrong';
+          _errorDetail = msg.replaceAll('Exception: ', '');
+        });
       }
     }
   }
 
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    super.dispose();
+  Future<void> _fetchAndNavigate(
+      String token, AuthService authService) async {
+    if (_disposed) return;
+
+    final user = await UserService.fetchMyProfile(token);
+    if (_disposed) return;
+
+    if (user.email != null && user.email!.isNotEmpty) {
+      try {
+        final refreshToken = await authService.getRefreshToken();
+        if (!_disposed &&
+            refreshToken != null &&
+            refreshToken.isNotEmpty) {
+          await authService.saveRefreshTokenForAccount(
+              user.email!, refreshToken);
+        }
+      } catch (_) {}
+    }
+
+    if (_disposed) return;
+    _safeSetState(() => _statusText = 'Loading your servers…');
+
+    await ServerService.fetchMyServers(token);
+    if (_disposed) return;
+
+    _safeSetState(() => _statusText = 'All done!');
+    await Future.delayed(const Duration(milliseconds: 350));
+    if (!_disposed && mounted) {
+      Navigator.pushReplacementNamed(context, '/home');
+    }
+  }
+
+  void _backgroundPostSetup(String token, AuthService authService) {
+    UserService.fetchMyProfile(token).then((user) {
+      if (_disposed) return;
+      if (user.email != null && user.email!.isNotEmpty) {
+        authService.getRefreshToken().then((refreshToken) {
+          if (_disposed) return;
+          if (refreshToken != null && refreshToken.isNotEmpty) {
+            authService.saveRefreshTokenForAccount(user.email!, refreshToken);
+          }
+        }).catchError((_) {});
+      }
+    }).catchError((_) {});
+    ServerService.fetchMyServers(token).catchError((_) {});
   }
 
   @override
@@ -259,15 +269,17 @@ class _AccountSetupScreenState extends State<AccountSetupScreen>
                 TextButton(
                   onPressed: () async {
                     final u = UserService.cachedUser;
-                    await AuthService().recordLastLogin(
-                      username: u?.effectiveName,
-                      email: u?.email,
-                      avatarUrl: u?.avatar,
-                    );
-                    await AuthService().clearTokens();
+                    try {
+                      await AuthService().recordLastLogin(
+                        username: u?.effectiveName,
+                        email: u?.email,
+                        avatarUrl: u?.avatar,
+                      );
+                      await AuthService().clearTokens();
+                    } catch (_) {}
                     UserService.clearCache();
                     ServerService.clearCache();
-                    if (mounted) {
+                    if (!_disposed && mounted) {
                       Navigator.pushReplacementNamed(context, '/welcome');
                     }
                   },

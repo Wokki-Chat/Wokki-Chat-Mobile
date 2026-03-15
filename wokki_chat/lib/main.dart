@@ -9,6 +9,7 @@ import 'package:wokki_chat/screens/account_setup_screen.dart';
 import 'package:wokki_chat/screens/home_shell.dart';
 import 'package:wokki_chat/theme/app_theme.dart';
 import 'package:wokki_chat/config/app_config.dart';
+import 'package:wokki_chat/models/user_model.dart';
 import 'dart:io';
 
 class _AllowSelfSigned extends HttpOverrides {
@@ -81,6 +82,7 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> {
   bool _isLoading = true;
   Widget? _destination;
+  bool _disposed = false;
 
   @override
   void initState() {
@@ -88,32 +90,56 @@ class _AuthGateState extends State<AuthGate> {
     _checkAuth();
   }
 
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
   Future<void> _checkAuth() async {
-    final authService = AuthService();
-    final hasToken = await authService.hasAccessToken();
+    try {
+      final authService = AuthService();
+      final hasToken = await authService.hasAccessToken();
+      if (_disposed) return;
 
-    Widget destination;
+      Widget destination;
 
-    if (hasToken) {
-      final cachedUser = await UserService.loadCachedUser();
-      if (cachedUser != null) {
-        destination = const HomeShell();
-        final token = await authService.getAccessToken();
-        if (token != null) {
-          UserService.fetchMyProfile(token).catchError((_) {});
+      if (hasToken) {
+        UserModel? cachedUser;
+        try {
+          cachedUser = await UserService.loadCachedUser();
+        } catch (_) {}
+
+        if (_disposed) return;
+
+        if (cachedUser != null) {
+          destination = const HomeShell();
+          try {
+            final token = await authService.getAccessToken();
+            if (!_disposed && token != null) {
+              UserService.fetchMyProfile(token).catchError((_) {});
+            }
+          } catch (_) {}
+        } else {
+          destination = const AccountSetupScreen();
         }
       } else {
-        destination = const AccountSetupScreen();
+        destination = const WelcomeScreen();
       }
-    } else {
-      destination = const WelcomeScreen();
-    }
 
-    if (mounted) {
-      setState(() {
-        _destination = destination;
-        _isLoading = false;
-      });
+      if (!_disposed && mounted) {
+        setState(() {
+          _destination = destination;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (!_disposed && mounted) {
+        setState(() {
+          _destination = const WelcomeScreen();
+          _isLoading = false;
+        });
+      }
     }
   }
 

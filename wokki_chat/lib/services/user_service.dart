@@ -3,8 +3,6 @@ import 'package:http/http.dart' as http;
 import 'package:wokki_chat/config/app_config.dart';
 import 'package:wokki_chat/models/user_model.dart';
 import 'package:wokki_chat/services/device_service.dart';
-import 'package:wokki_chat/services/auth_service.dart';
-import 'package:wokki_chat/services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class UserService {
@@ -64,28 +62,8 @@ class UserService {
     } catch (_) {}
   }
 
-  static Future<UserModel> fetchMyProfile(String accessToken) async {
-    final authService = AuthService();
+  static Future<UserModel> fetchMyProfile(String validToken) async {
     final deviceId = await DeviceService.getDeviceId();
-    
-    String? validToken = accessToken;
-    if (!(await authService.isAccessTokenValid())) {
-      final refreshToken = await authService.getRefreshToken();
-      if (refreshToken != null && refreshToken.isNotEmpty) {
-        try {
-          final response = await ApiService.refreshToken(refreshToken);
-          await authService.saveTokens(
-            accessToken: response['access_token'],
-            refreshToken: response['refresh_token'],
-          );
-          validToken = response['access_token'];
-        } catch (_) {
-          throw Exception('Session expired - please log in again');
-        }
-      } else {
-        throw Exception('Session expired - please log in again');
-      }
-    }
 
     final headers = {
       'Content-Type': 'application/json',
@@ -109,19 +87,15 @@ class UserService {
 
         if (response.statusCode == 200) {
           final userData = _extractUser(response.body);
-
           if (userData == null) {
             throw Exception('Could not parse user profile from response.');
           }
-
           final user = UserModel.fromJson(userData);
           _cachedUser = user;
           await _persistUser(user);
           return user;
-
         } else if (response.statusCode == 401) {
           throw Exception('Unauthorized');
-
         } else {
           String msg;
           try {
@@ -133,7 +107,7 @@ class UserService {
           lastError = Exception(msg);
         }
       } catch (e) {
-        if (e.toString().contains('Unauthorized') || 
+        if (e.toString().contains('Unauthorized') ||
             e.toString().contains('Session expired')) rethrow;
         lastError = e is Exception ? e : Exception(e.toString());
       }

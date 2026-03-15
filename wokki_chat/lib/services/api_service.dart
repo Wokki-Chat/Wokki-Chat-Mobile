@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:wokki_chat/config/app_config.dart';
@@ -38,11 +39,7 @@ class ApiService {
     for (final base in _baseUrls) {
       try {
         final response = await http
-            .post(
-              Uri.parse('$base$path'),
-              headers: headers,
-              body: body,
-            )
+            .post(Uri.parse('$base$path'), headers: headers, body: body)
             .timeout(const Duration(seconds: 10));
         return response;
       } catch (e) {
@@ -50,49 +47,6 @@ class ApiService {
       }
     }
     throw lastError ?? Exception('All endpoints unreachable');
-  }
-
-  static Future<http.Response> _getWithFallback({
-    required String path,
-    required Map<String, String> headers,
-  }) async {
-    Exception? lastError;
-    for (final base in _baseUrls) {
-      try {
-        final response = await http
-            .get(Uri.parse('$base$path'), headers: headers)
-            .timeout(const Duration(seconds: 10));
-        return response;
-      } catch (e) {
-        lastError = e is Exception ? e : Exception(e.toString());
-      }
-    }
-    throw lastError ?? Exception('All endpoints unreachable');
-  }
-
-  static Future<String?> _ensureValidToken(AuthService authService) async {
-    final accessToken = await authService.getAccessToken();
-    if (accessToken == null) return null;
-
-    if (await authService.isAccessTokenValid()) {
-      return accessToken;
-    }
-
-    final refreshTokenValue = await authService.getRefreshToken();
-    if (refreshTokenValue == null || refreshTokenValue.isEmpty) {
-      return null;
-    }
-
-    try {
-      final response = await ApiService.refreshToken(refreshTokenValue);
-      await authService.saveTokens(
-        accessToken: response['access_token'],
-        refreshToken: response['refresh_token'],
-      );
-      return response['access_token'];
-    } catch (_) {
-      return null;
-    }
   }
 
   static Future<Map<String, dynamic>> loginWithPassword({
@@ -143,11 +97,7 @@ class ApiService {
     for (final base in _baseUrls) {
       try {
         final response = await http
-            .post(
-              Uri.parse('$base/signup'),
-              headers: headers,
-              body: body,
-            )
+            .post(Uri.parse('$base/signup'), headers: headers, body: body)
             .timeout(const Duration(seconds: 10));
 
         if (response.statusCode == 200 || response.statusCode == 201) {
@@ -173,31 +123,55 @@ class ApiService {
     throw lastError ?? Exception('All endpoints unreachable');
   }
 
-  static Future<Map<String, dynamic>> refreshToken(
-      String refreshToken) async {
+  static Future<Map<String, dynamic>> refreshToken(String refreshToken) async {
+    developer.log('[TOKEN] Sending refresh_token grant to /mobile_token', name: 'ApiService');
+
     final body = jsonEncode({
       'grant_type': 'refresh_token',
       'refresh_token': refreshToken,
       'client_id': AppConfig.clientId,
     });
 
-    final response = await _postWithFallback(
-      path: '/mobile_token',
-      headers: await _signedHeaders(body),
-      body: body,
-    );
+    http.Response response;
+    try {
+      response = await _postWithFallback(
+        path: '/mobile_token',
+        headers: await _signedHeaders(body),
+        body: body,
+      );
+    } catch (e) {
+      developer.log('[TOKEN] Network error during refresh: $e', name: 'ApiService');
+      rethrow;
+    }
+
+    developer.log('[TOKEN] Refresh response status: ${response.statusCode}', name: 'ApiService');
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
+      final hasAccess = data['access_token'] != null &&
+          (data['access_token'] as String).isNotEmpty;
+      final hasRefresh = data['refresh_token'] != null &&
+          (data['refresh_token'] as String).isNotEmpty;
+      developer.log(
+        '[TOKEN] Refresh OK — access_token: ${hasAccess ? "present" : "MISSING"}, refresh_token: ${hasRefresh ? "present" : "not returned"}',
+        name: 'ApiService',
+      );
       return {
         'access_token': data['access_token'],
         'refresh_token': data['refresh_token'] ?? refreshToken,
         'expires_in': data['expires_in'] ?? 3600,
       };
     } else {
-      final error = jsonDecode(response.body);
-      throw Exception(
-          error['error_description'] ?? 'Token refresh failed');
+      final rawBody = response.body;
+      developer.log(
+          '[TOKEN] Refresh FAILED — status ${response.statusCode}, body: $rawBody',
+          name: 'ApiService');
+      Map<String, dynamic>? error;
+      try {
+        error = jsonDecode(rawBody);
+      } catch (_) {}
+      throw Exception(error?['error_description'] ??
+          'Token refresh failed (${response.statusCode})');
     }
   }
 
@@ -211,7 +185,7 @@ class ApiService {
     String? validToken = accessToken;
 
     if (authService != null) {
-      validToken = await _ensureValidToken(authService);
+      validToken = await authService.ensureValidToken(ApiService.refreshToken);
       if (validToken == null) {
         throw Exception('Session expired - please log in again');
       }

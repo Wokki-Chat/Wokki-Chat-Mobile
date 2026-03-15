@@ -54,13 +54,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     }
 
     final authService = AuthService();
-    final savedRefresh =
-        await authService.getRefreshTokenForAccount(info.email!);
+    final savedRefresh = await authService.getRefreshTokenForAccount(info.email!);
 
     if (savedRefresh == null || savedRefresh.isEmpty) {
-      if (mounted) {
-        Navigator.pushNamed(context, '/login', arguments: info.email);
-      }
+      if (mounted) Navigator.pushNamed(context, '/login', arguments: info.email);
       return;
     }
 
@@ -72,11 +69,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       await authService.saveTokens(
         accessToken: response['access_token'],
         refreshToken: response['refresh_token'],
+        expiresIn: (response['expires_in'] as num?)?.toInt() ?? 604800,
       );
 
-      if (mounted) {
-        Navigator.pushReplacementNamed(context, '/setup');
-      }
+      if (mounted) Navigator.pushReplacementNamed(context, '/setup');
     } catch (e) {
       await authService.deleteRefreshTokenForAccount(info.email!);
       if (mounted) {
@@ -276,8 +272,7 @@ class _AccountRow extends StatelessWidget {
                     ? Image.network(
                         info.avatarUrl!,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
-                            _initial(initial, colors),
+                        errorBuilder: (_, __, ___) => _initial(initial, colors),
                       )
                     : _initial(initial, colors),
               ),
@@ -324,8 +319,7 @@ class _AccountRow extends StatelessWidget {
                 height: 18,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  valueColor:
-                      AlwaysStoppedAnimation<Color>(colors.primaryA0),
+                  valueColor: AlwaysStoppedAnimation<Color>(colors.primaryA0),
                 ),
               )
             else
