@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wokki_chat/services/auth_service.dart';
 import 'package:wokki_chat/services/user_service.dart';
+import 'package:wokki_chat/services/server_service.dart';
 import 'package:wokki_chat/theme/app_theme.dart';
 
 class AccountSetupScreen extends StatefulWidget {
@@ -60,6 +61,7 @@ class _AccountSetupScreenState extends State<AccountSetupScreen>
           });
         }
       }).catchError((_) {});
+      ServerService.fetchMyServers(token).catchError((_) {});
       return;
     }
     
@@ -77,6 +79,10 @@ class _AccountSetupScreenState extends State<AccountSetupScreen>
           );
         }
       }
+      
+      if (mounted) setState(() => _statusText = 'Loading your servers…');
+      
+      await ServerService.fetchMyServers(token);
       
       if (mounted) {
         setState(() => _statusText = 'All done!');
@@ -111,6 +117,10 @@ class _AccountSetupScreenState extends State<AccountSetupScreen>
               );
             }
           }
+          
+          if (mounted) setState(() => _statusText = 'Loading your servers…');
+          
+          await ServerService.fetchMyServers(token);
           
           if (mounted) {
             setState(() => _statusText = 'All done!');
@@ -256,6 +266,7 @@ class _AccountSetupScreenState extends State<AccountSetupScreen>
                     );
                     await AuthService().clearTokens();
                     UserService.clearCache();
+                    ServerService.clearCache();
                     if (mounted) {
                       Navigator.pushReplacementNamed(context, '/welcome');
                     }

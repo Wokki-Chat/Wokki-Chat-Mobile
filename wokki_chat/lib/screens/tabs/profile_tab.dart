@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wokki_chat/services/auth_service.dart';
 import 'package:wokki_chat/services/user_service.dart';
+import 'package:wokki_chat/services/server_service.dart';
 import 'package:wokki_chat/models/user_model.dart';
 import 'package:wokki_chat/theme/app_theme.dart';
 
@@ -39,6 +40,7 @@ class ProfileTab extends StatelessWidget {
               );
               await AuthService().clearTokens();
               UserService.clearCache();
+              ServerService.clearCache();
               if (context.mounted) {
                 Navigator.pushReplacementNamed(context, '/welcome');
               }
