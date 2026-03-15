@@ -5,6 +5,7 @@ class AppConfig {
   static String get apiUrlFallback => dotenv.env['API_URL_FALLBACK'] ?? '';
   static String get clientId => dotenv.env['CLIENT_ID'] ?? '';
   static String get hmacSecret => dotenv.env['HMAC_SECRET'] ?? '';
+  static String get socketUrl => dotenv.env['SOCKET_URL'] ?? '';
 
   static bool get allowSelfSigned =>
       dotenv.env['ALLOW_SELF_SIGNED']?.toLowerCase() == 'true';

@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:wokki_chat/theme/app_theme.dart';
+import 'package:wokki_chat/theme/app_colors_provider.dart';
 
-class NotificationsTab extends StatelessWidget {
+class NotificationsTab extends StatefulWidget {
   const NotificationsTab({super.key});
 
   @override
+  State<NotificationsTab> createState() => _NotificationsTabState();
+}
+
+class _NotificationsTabState extends State<NotificationsTab> with ThemeAware<NotificationsTab> {
+  @override
   Widget build(BuildContext context) {
-    final colors = AppThemeMode.slate.colors;
+    final colors = appColors;
 
     return Scaffold(
       backgroundColor: colors.surfaceA0,

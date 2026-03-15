@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wokki_chat/services/auth_service.dart';
 import 'package:wokki_chat/services/api_service.dart';
-import 'package:wokki_chat/theme/app_theme.dart';
+import 'package:wokki_chat/theme/app_colors_provider.dart';
 import 'package:wokki_chat/widgets/form_widgets.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -82,7 +82,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppThemeMode.slate.colors;
+    final colors = AppColorsProvider.of(context);
 
     return Scaffold(
       backgroundColor: colors.surfaceA0,
@@ -126,7 +126,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 36),
-
                   FieldLabel(label: 'Email', colors: colors),
                   const SizedBox(height: 8),
                   InputField(
@@ -143,7 +142,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         FocusScope.of(context).requestFocus(_passwordFocus),
                   ),
                   const SizedBox(height: 20),
-
                   FieldLabel(label: 'Password', colors: colors),
                   const SizedBox(height: 8),
                   InputField(
@@ -169,19 +167,17 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     onSubmitted: (_) => _handleLogin(),
                   ),
-
                   if (_errorMessage != null) ...[
                     const SizedBox(height: 16),
                     ErrorBanner(message: _errorMessage!, colors: colors),
                   ],
-
                   const SizedBox(height: 32),
-
                   FilledButton(
                     onPressed: _isLoading ? null : _handleLogin,
                     style: FilledButton.styleFrom(
                       backgroundColor: colors.primaryA0,
-                      disabledBackgroundColor: colors.primaryA0.withOpacity(0.5),
+                      disabledBackgroundColor:
+                          colors.primaryA0.withOpacity(0.5),
                       foregroundColor: colors.textWhiteA0,
                       padding: const EdgeInsets.symmetric(vertical: 15),
                       shape: RoundedRectangleBorder(
@@ -207,7 +203,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         : const Text('Log In'),
                   ),
                   const SizedBox(height: 24),
-
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -220,8 +215,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       GestureDetector(
-                        onTap: () =>
-                            Navigator.pushReplacementNamed(context, '/signup'),
+                        onTap: () => Navigator.pushReplacementNamed(
+                            context, '/signup'),
                         child: Text(
                           'Sign up',
                           style: TextStyle(

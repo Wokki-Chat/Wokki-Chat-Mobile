@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:wokki_chat/services/auth_service.dart';
 import 'package:wokki_chat/services/user_service.dart';
 import 'package:wokki_chat/services/server_service.dart';
+import 'package:wokki_chat/services/socket_service.dart';
 import 'package:wokki_chat/theme/app_theme.dart';
 
 class AccountSetupScreen extends StatefulWidget {
@@ -117,8 +118,7 @@ class _AccountSetupScreenState extends State<AccountSetupScreen>
     }
   }
 
-  Future<void> _fetchAndNavigate(
-      String token, AuthService authService) async {
+  Future<void> _fetchAndNavigate(String token, AuthService authService) async {
     if (_disposed) return;
 
     final user = await UserService.fetchMyProfile(token);
@@ -127,11 +127,8 @@ class _AccountSetupScreenState extends State<AccountSetupScreen>
     if (user.email != null && user.email!.isNotEmpty) {
       try {
         final refreshToken = await authService.getRefreshToken();
-        if (!_disposed &&
-            refreshToken != null &&
-            refreshToken.isNotEmpty) {
-          await authService.saveRefreshTokenForAccount(
-              user.email!, refreshToken);
+        if (!_disposed && refreshToken != null && refreshToken.isNotEmpty) {
+          await authService.saveRefreshTokenForAccount(user.email!, refreshToken);
         }
       } catch (_) {}
     }
@@ -230,8 +227,7 @@ class _AccountSetupScreenState extends State<AccountSetupScreen>
                   decoration: BoxDecoration(
                     color: colors.surfaceA10,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: colors.dangerA0.withOpacity(0.3)),
+                    border: Border.all(color: colors.dangerA0.withOpacity(0.3)),
                   ),
                   child: Text(
                     _errorDetail!,
@@ -252,8 +248,8 @@ class _AccountSetupScreenState extends State<AccountSetupScreen>
                   style: FilledButton.styleFrom(
                     backgroundColor: colors.primaryA0,
                     foregroundColor: colors.textWhiteA0,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 28, vertical: 12),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                       side: BorderSide(color: colors.primaryA30, width: 1),
@@ -277,6 +273,7 @@ class _AccountSetupScreenState extends State<AccountSetupScreen>
                       );
                       await AuthService().clearTokens();
                     } catch (_) {}
+                    SocketService().disconnect();
                     UserService.clearCache();
                     ServerService.clearCache();
                     if (!_disposed && mounted) {

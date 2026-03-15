@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:wokki_chat/services/auth_service.dart';
 import 'package:wokki_chat/services/user_service.dart';
-import 'package:wokki_chat/services/server_service.dart';
 import 'package:wokki_chat/services/background_sync.dart';
 import 'package:wokki_chat/models/user_model.dart';
+import 'package:wokki_chat/screens/settings_screen.dart';
 import 'package:wokki_chat/theme/app_theme.dart';
+import 'package:wokki_chat/theme/app_colors_provider.dart';
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
@@ -13,7 +13,7 @@ class ProfileTab extends StatefulWidget {
   State<ProfileTab> createState() => _ProfileTabState();
 }
 
-class _ProfileTabState extends State<ProfileTab> {
+class _ProfileTabState extends State<ProfileTab> with ThemeAware<ProfileTab> {
   UserModel? _user;
   bool _disposed = false;
 
@@ -43,7 +43,7 @@ class _ProfileTabState extends State<ProfileTab> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppThemeMode.slate.colors;
+    final colors = appColors;
 
     return Scaffold(
       backgroundColor: colors.surfaceA0,
@@ -62,20 +62,14 @@ class _ProfileTabState extends State<ProfileTab> {
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.logout_rounded, color: colors.textA30),
-            onPressed: () async {
-              final u = UserService.cachedUser;
-              await AuthService().recordLastLogin(
-                username: u?.effectiveName,
-                email: u?.email,
-                avatarUrl: u?.avatar,
+            icon: Icon(Icons.settings_rounded, color: colors.textA30),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const SettingsScreen(),
+                ),
               );
-              await AuthService().clearTokens();
-              UserService.clearCache();
-              ServerService.clearCache();
-              if (context.mounted) {
-                Navigator.pushReplacementNamed(context, '/welcome');
-              }
             },
           ),
         ],

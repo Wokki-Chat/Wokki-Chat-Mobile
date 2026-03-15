@@ -14,7 +14,7 @@ class BackgroundSync {
     final token = await authService.ensureValidToken(ApiService.refreshToken);
 
     if (token == null) {
-      developer.log('[SYNC] No valid token — skipping sync', name: 'BackgroundSync');
+      developer.log('[SYNC] No valid token - skipping sync', name: 'BackgroundSync');
       return (user: null, servers: null);
     }
 
@@ -29,7 +29,7 @@ class BackgroundSync {
     final servers = results[1] as List<ServerModel>?;
 
     developer.log(
-      '[SYNC] Done — user: ${user != null ? "ok" : "failed"}, servers: ${servers != null ? "${servers.length} loaded" : "failed"}',
+      '[SYNC] Done - user: ${user != null ? "ok" : "failed"}, servers: ${servers != null ? "${servers.length} loaded" : "failed"}',
       name: 'BackgroundSync',
     );
 

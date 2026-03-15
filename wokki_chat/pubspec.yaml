@@ -14,6 +14,7 @@ dependencies:
   http: ^1.1.0
   shared_preferences: ^2.3.0
   crypto: ^3.0.0
+  socket_io_client: ^2.0.3+1
  
 dev_dependencies:
   flutter_test:
@@ -45,4 +46,3 @@ flutter:
           weight: 600
         - asset: fonts/Inter-Bold.ttf
           weight: 700
- 

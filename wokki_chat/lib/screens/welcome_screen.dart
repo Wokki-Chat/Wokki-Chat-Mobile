@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wokki_chat/services/auth_service.dart';
 import 'package:wokki_chat/services/api_service.dart';
-import 'package:wokki_chat/theme/app_theme.dart';
+import 'package:wokki_chat/theme/app_colors_provider.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -54,10 +54,13 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     }
 
     final authService = AuthService();
-    final savedRefresh = await authService.getRefreshTokenForAccount(info.email!);
+    final savedRefresh =
+        await authService.getRefreshTokenForAccount(info.email!);
 
     if (savedRefresh == null || savedRefresh.isEmpty) {
-      if (mounted) Navigator.pushNamed(context, '/login', arguments: info.email);
+      if (mounted) {
+        Navigator.pushNamed(context, '/login', arguments: info.email);
+      }
       return;
     }
 
@@ -84,7 +87,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppThemeMode.slate.colors;
+    final colors = AppColorsProvider.of(context);
 
     return Scaffold(
       backgroundColor: colors.surfaceA0,
@@ -95,7 +98,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Spacer(flex: 2),
-
               Center(
                 child: SizedBox(
                   width: 100,
@@ -134,7 +136,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   ),
                 ),
               ),
-
               if (_accounts.isNotEmpty) ...[
                 const SizedBox(height: 32),
                 Text(
@@ -181,9 +182,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   ),
                 ),
               ],
-
               const Spacer(flex: 3),
-
               FilledButton(
                 onPressed: _loadingEmail != null
                     ? null
@@ -272,13 +271,13 @@ class _AccountRow extends StatelessWidget {
                     ? Image.network(
                         info.avatarUrl!,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _initial(initial, colors),
+                        errorBuilder: (_, __, ___) =>
+                            _initial(initial, colors),
                       )
                     : _initial(initial, colors),
               ),
             ),
             const SizedBox(width: 12),
-
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -312,14 +311,14 @@ class _AccountRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-
             if (isLoading)
               SizedBox(
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(colors.primaryA0),
+                  valueColor:
+                      AlwaysStoppedAnimation<Color>(colors.primaryA0),
                 ),
               )
             else

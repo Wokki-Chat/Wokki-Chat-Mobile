@@ -8,8 +8,11 @@ import 'package:wokki_chat/screens/signup_screen.dart';
 import 'package:wokki_chat/screens/account_setup_screen.dart';
 import 'package:wokki_chat/screens/home_shell.dart';
 import 'package:wokki_chat/theme/app_theme.dart';
+import 'package:wokki_chat/theme/app_colors_provider.dart';
 import 'package:wokki_chat/config/app_config.dart';
 import 'package:wokki_chat/models/user_model.dart';
+import 'package:wokki_chat/state/app_theme_notifier.dart';
+import 'package:wokki_chat/services/settings_service.dart';
 import 'dart:io';
 
 class _AllowSelfSigned extends HttpOverrides {
@@ -34,20 +37,28 @@ class _AllowSelfSigned extends HttpOverrides {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
+  await AppThemeNotifier.init();
+  await SettingsService.init();
   if (AppConfig.allowSelfSigned) {
     HttpOverrides.global = _AllowSelfSigned();
   }
   runApp(const WokkiChatApp());
 }
 
-class WokkiChatApp extends StatelessWidget {
+class WokkiChatApp extends StatefulWidget {
   const WokkiChatApp({super.key});
 
   @override
+  State<WokkiChatApp> createState() => _WokkiChatAppState();
+}
+
+class _WokkiChatAppState extends State<WokkiChatApp> with ThemeAware<WokkiChatApp> {
+  @override
   Widget build(BuildContext context) {
+    final colors = AppThemeNotifier.instance.value.colors;
     return MaterialApp(
       title: 'Wokki Chat',
-      theme: AppTheme.createTheme(AppThemeMode.slate.colors),
+      theme: AppTheme.createTheme(colors),
       home: const AuthGate(),
       onGenerateRoute: (settings) {
         switch (settings.name) {
@@ -79,7 +90,7 @@ class AuthGate extends StatefulWidget {
   State<AuthGate> createState() => _AuthGateState();
 }
 
-class _AuthGateState extends State<AuthGate> {
+class _AuthGateState extends State<AuthGate> with ThemeAware<AuthGate> {
   bool _isLoading = true;
   Widget? _destination;
   bool _disposed = false;
@@ -146,8 +157,9 @@ class _AuthGateState extends State<AuthGate> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
+      final colors = appColors;
       return Scaffold(
-        backgroundColor: AppThemeMode.slate.colors.surfaceA0,
+        backgroundColor: colors.surfaceA0,
         body: const Center(child: CircularProgressIndicator()),
       );
     }

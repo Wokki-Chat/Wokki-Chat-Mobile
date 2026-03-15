@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wokki_chat/services/auth_service.dart';
 import 'package:wokki_chat/services/api_service.dart';
-import 'package:wokki_chat/theme/app_theme.dart';
+import 'package:wokki_chat/theme/app_colors_provider.dart';
 import 'package:wokki_chat/widgets/form_widgets.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -76,7 +76,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppThemeMode.slate.colors;
+    final colors = AppColorsProvider.of(context);
 
     return Scaffold(
       backgroundColor: colors.surfaceA0,
@@ -120,7 +120,6 @@ class _SignupScreenState extends State<SignupScreen> {
                     ),
                   ),
                   const SizedBox(height: 36),
-
                   FieldLabel(label: 'Display Name', colors: colors),
                   const SizedBox(height: 8),
                   InputField(
@@ -136,7 +135,6 @@ class _SignupScreenState extends State<SignupScreen> {
                         FocusScope.of(context).requestFocus(_emailFocus),
                   ),
                   const SizedBox(height: 20),
-
                   FieldLabel(label: 'Email', colors: colors),
                   const SizedBox(height: 8),
                   InputField(
@@ -153,7 +151,6 @@ class _SignupScreenState extends State<SignupScreen> {
                         FocusScope.of(context).requestFocus(_passwordFocus),
                   ),
                   const SizedBox(height: 20),
-
                   FieldLabel(label: 'Password', colors: colors),
                   const SizedBox(height: 8),
                   InputField(
@@ -179,19 +176,17 @@ class _SignupScreenState extends State<SignupScreen> {
                     ),
                     onSubmitted: (_) => _handleSignup(),
                   ),
-
                   if (_errorMessage != null) ...[
                     const SizedBox(height: 16),
                     ErrorBanner(message: _errorMessage!, colors: colors),
                   ],
-
                   const SizedBox(height: 32),
-
                   FilledButton(
                     onPressed: _isLoading ? null : _handleSignup,
                     style: FilledButton.styleFrom(
                       backgroundColor: colors.primaryA0,
-                      disabledBackgroundColor: colors.primaryA0.withOpacity(0.5),
+                      disabledBackgroundColor:
+                          colors.primaryA0.withOpacity(0.5),
                       foregroundColor: colors.textWhiteA0,
                       padding: const EdgeInsets.symmetric(vertical: 15),
                       shape: RoundedRectangleBorder(
@@ -217,7 +212,6 @@ class _SignupScreenState extends State<SignupScreen> {
                         : const Text('Create Account'),
                   ),
                   const SizedBox(height: 24),
-
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [

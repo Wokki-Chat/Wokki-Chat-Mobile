@@ -3,13 +3,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wokki_chat/theme/app_theme.dart';
 import 'package:wokki_chat/services/server_service.dart';
 import 'package:wokki_chat/services/background_sync.dart';
+import 'package:wokki_chat/services/auth_service.dart';
+import 'package:wokki_chat/services/socket_service.dart';
 import 'package:wokki_chat/models/server_model.dart';
+import 'package:wokki_chat/state/chat_overlay_notifier.dart';
+import 'package:wokki_chat/services/settings_service.dart';
+import 'package:wokki_chat/theme/app_colors_provider.dart';
 
 const _kLastServerId = 'last_server_id';
 const _kLastChannelPrefix = 'last_channel_id_';
-
 class HomeTab extends StatefulWidget {
-  const HomeTab({super.key});
+  final ChatOverlayNotifier overlayNotifier;
+
+  const HomeTab({super.key, required this.overlayNotifier});
 
   @override
   State<HomeTab> createState() => _HomeTabState();
@@ -22,11 +28,14 @@ class _HomeTabState extends State<HomeTab> {
   String? _selectedChannelId;
   final Set<String> _collapsedGroups = {};
   bool _disposed = false;
+  final _socketService = SocketService();
+  String? _accessToken;
 
   @override
   void initState() {
     super.initState();
     _loadServers();
+    _initSocket();
   }
 
   @override
@@ -37,6 +46,17 @@ class _HomeTabState extends State<HomeTab> {
 
   void _safeSetState(VoidCallback fn) {
     if (!_disposed && mounted) setState(fn);
+  }
+
+  Future<void> _initSocket() async {
+    try {
+      final authService = AuthService();
+      final token = await authService.getAccessToken();
+      if (token != null && token.isNotEmpty) {
+        _accessToken = token;
+        _socketService.connect(token);
+      }
+    } catch (_) {}
   }
 
   List<ServerModel> _sortedServers(List<ServerModel> servers) {
@@ -112,6 +132,15 @@ class _HomeTabState extends State<HomeTab> {
     return null;
   }
 
+  ChannelModel? _findChannel(ServerModel server, String channelId) {
+    for (final g in server.channelGroups) {
+      for (final c in g.channels) {
+        if (c.id == channelId) return c;
+      }
+    }
+    return null;
+  }
+
   Future<void> _loadServers() async {
     List<ServerModel>? cachedServers;
     try {
@@ -172,9 +201,11 @@ class _HomeTabState extends State<HomeTab> {
         final allChannels = updatedSelectedServer.channelGroups
             .expand((g) => g.channels)
             .toList();
-        final channelStillExists = allChannels.any((c) => c.id == currentChannelId);
+        final channelStillExists =
+            allChannels.any((c) => c.id == currentChannelId);
         if (!channelStillExists) {
-          updatedChannelId = _resolveChannelForServer(updatedSelectedServer, null);
+          updatedChannelId =
+              _resolveChannelForServer(updatedSelectedServer, null);
         }
       }
     }
@@ -204,6 +235,7 @@ class _HomeTabState extends State<HomeTab> {
     }
 
     String? channelId;
+
     if (server != null) {
       final lastChannelId = await _getLastChannelId(server.id);
       if (_disposed || !mounted) return;
@@ -217,22 +249,55 @@ class _HomeTabState extends State<HomeTab> {
     });
   }
 
+  void _emitChangeRoom(String serverId, String channelId) {
+    if (_accessToken != null) {
+      _socketService.changeRoom(
+        accessToken: _accessToken!,
+        serverId: serverId,
+        channelId: channelId,
+      );
+    }
+  }
+
+  void _openChat() {
+    if (_selectedServer != null && _selectedChannelId != null) {
+      final channel = _findChannel(_selectedServer!, _selectedChannelId!);
+      if (channel != null) {
+        widget.overlayNotifier.show(_selectedServer!, channel);
+      }
+    }
+  }
+
   void _onServerTap(ServerModel server) async {
     final lastChannelId = await _getLastChannelId(server.id);
     if (_disposed || !mounted) return;
-    final channelId = _resolveChannelForServer(server, lastChannelId);
+
+    String? channelId;
+
+    if (SettingsService.autoOpenLastChannelNotifier.value) {
+      channelId = _resolveChannelForServer(server, lastChannelId);
+    }
+
     await _saveLastServerId(server.id);
+
     _safeSetState(() {
       _selectedServer = server;
       _selectedChannelId = channelId;
     });
+
+    if (SettingsService.autoOpenLastChannelNotifier.value && channelId != null) {
+      _emitChangeRoom(server.id, channelId);
+      _openChat();
+    }
   }
 
   void _onChannelTap(String channelId) async {
     if (_selectedServer != null) {
       await _saveLastChannelId(_selectedServer!.id, channelId);
+      _emitChangeRoom(_selectedServer!.id, channelId);
     }
     _safeSetState(() => _selectedChannelId = channelId);
+    _openChat();
   }
 
   void _onLogoTap() async {
@@ -241,49 +306,78 @@ class _HomeTabState extends State<HomeTab> {
       _selectedServer = null;
       _selectedChannelId = null;
     });
+    widget.overlayNotifier.hide();
   }
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppThemeMode.slate.colors;
+    final colors = AppColorsProvider.of(context);
 
-    return Scaffold(
+    final hasChannelSelected = _selectedServer != null && _selectedChannelId != null;
+
+    final sidebarContent = Row(
+      children: [
+        _ServerBar(
+          servers: _servers,
+          isLoading: _isLoading,
+          selectedServer: _selectedServer,
+          colors: colors,
+          onServerTap: _onServerTap,
+          onLogoTap: _onLogoTap,
+        ),
+        if (_selectedServer != null)
+          Expanded(
+            child: _ChannelSidebar(
+              server: _selectedServer!,
+              colors: colors,
+              collapsedGroups: _collapsedGroups,
+              selectedChannelId: _selectedChannelId,
+              sortedGroups: _sortedGroups,
+              sortedChannels: _sortedChannels,
+              autoOpenLastChannel: SettingsService.autoOpenLastChannelNotifier.value,
+              onAutoOpenChanged: (val) {
+                SettingsService.setAutoOpenLastChannel(val);
+              },
+              onToggleGroup: (groupId) {
+                _safeSetState(() {
+                  if (_collapsedGroups.contains(groupId)) {
+                    _collapsedGroups.remove(groupId);
+                  } else {
+                    _collapsedGroups.add(groupId);
+                  }
+                });
+              },
+              onChannelTap: _onChannelTap,
+            ),
+          )
+        else
+          Expanded(child: Container(color: colors.surfaceA0)),
+      ],
+    );
+
+    return ListenableBuilder(
+      listenable: SettingsService.autoOpenLastChannelNotifier,
+      builder: (context, _) => Scaffold(
       backgroundColor: colors.surfaceA0,
-      body: Row(
-        children: [
-          _ServerBar(
-            servers: _servers,
-            isLoading: _isLoading,
-            selectedServer: _selectedServer,
-            colors: colors,
-            onServerTap: _onServerTap,
-            onLogoTap: _onLogoTap,
-          ),
-          if (_selectedServer != null)
-            Expanded(
-              child: _ChannelSidebar(
-                server: _selectedServer!,
-                colors: colors,
-                collapsedGroups: _collapsedGroups,
-                selectedChannelId: _selectedChannelId,
-                sortedGroups: _sortedGroups,
-                sortedChannels: _sortedChannels,
-                onToggleGroup: (groupId) {
-                  _safeSetState(() {
-                    if (_collapsedGroups.contains(groupId)) {
-                      _collapsedGroups.remove(groupId);
-                    } else {
-                      _collapsedGroups.add(groupId);
-                    }
-                  });
-                },
-                onChannelTap: _onChannelTap,
-              ),
-            )
-          else
-            Expanded(child: Container(color: colors.surfaceA0)),
-        ],
+      body: GestureDetector(
+        onHorizontalDragUpdate: (details) {
+          if (!hasChannelSelected) return;
+          final delta = details.delta.dx / MediaQuery.of(context).size.width;
+          widget.overlayNotifier.dragValue =
+              (widget.overlayNotifier.dragValue - delta).clamp(0.0, 1.0);
+        },
+        onHorizontalDragEnd: (details) {
+          if (!hasChannelSelected) return;
+          final velocity = details.primaryVelocity ?? 0;
+          if (velocity < -300 || widget.overlayNotifier.dragValue > 0.5) {
+            _openChat();
+          } else {
+            widget.overlayNotifier.cancelDrag();
+          }
+        },
+        child: sidebarContent,
       ),
+    ),
     );
   }
 }
@@ -376,7 +470,8 @@ class _ServerBar extends StatelessWidget {
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(colors.primaryA0),
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(colors.primaryA0),
                     ),
                   ),
                 ),
@@ -498,6 +593,8 @@ class _ChannelSidebar extends StatelessWidget {
   final List<ChannelModel> Function(List<ChannelModel>) sortedChannels;
   final ValueChanged<String> onToggleGroup;
   final ValueChanged<String> onChannelTap;
+  final bool autoOpenLastChannel;
+  final ValueChanged<bool> onAutoOpenChanged;
 
   const _ChannelSidebar({
     required this.server,
@@ -508,6 +605,8 @@ class _ChannelSidebar extends StatelessWidget {
     required this.sortedChannels,
     required this.onToggleGroup,
     required this.onChannelTap,
+    required this.autoOpenLastChannel,
+    required this.onAutoOpenChanged,
   });
 
   @override
@@ -527,41 +626,60 @@ class _ChannelSidebar extends StatelessWidget {
           children: [
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              padding: const EdgeInsets.fromLTRB(14, 14, 8, 14),
               decoration: BoxDecoration(
                 border: Border(
                   bottom: BorderSide(color: colors.surfaceA20, width: 1),
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  Text(
-                    server.name,
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: colors.textA0,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          server.name,
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: colors.textA0,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (server.description != null &&
+                            server.description!.isNotEmpty) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            server.description!,
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 11,
+                              color: colors.textA40,
+                              height: 1.4,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
-                  if (server.description != null &&
-                      server.description!.isNotEmpty) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      server.description!,
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 11,
-                        color: colors.textA40,
-                        height: 1.4,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                  IconButton(
+                    onPressed: () => _showSettings(context),
+                    icon: Icon(
+                      Icons.settings_rounded,
+                      size: 18,
+                      color: colors.textA40,
                     ),
-                  ],
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -629,6 +747,80 @@ class _ChannelSidebar extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  void _showSettings(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: colors.popupA0,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) {
+        bool localValue = autoOpenLastChannel;
+        return StatefulBuilder(
+          builder: (context, setSheetState) => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Channel Settings',
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: colors.textA0,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Auto-open last channel',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: colors.textA0,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'Automatically open the last active channel when selecting a server',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 12,
+                              color: colors.textA40,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Switch(
+                      value: localValue,
+                      onChanged: (val) {
+                        setSheetState(() => localValue = val);
+                        onAutoOpenChanged(val);
+                      },
+                      activeColor: colors.primaryA0,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

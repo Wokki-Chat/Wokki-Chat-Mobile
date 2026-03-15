@@ -67,7 +67,7 @@ class AuthService {
 
     final expiry = DateTime.fromMillisecondsSinceEpoch(expiryMs);
     final valid = DateTime.now().isBefore(expiry.subtract(const Duration(seconds: 30)));
-    developer.log('[TOKEN] Access token expiry: $expiry — valid: $valid', name: 'AuthService');
+    developer.log('[TOKEN] Access token expiry: $expiry - valid: $valid', name: 'AuthService');
     return valid;
   }
 
