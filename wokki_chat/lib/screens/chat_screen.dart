@@ -6,11 +6,13 @@ import 'dart:convert';
 import '../models/message.dart';
 import '../widgets/message_widget.dart';
 import '../widgets/date_separator.dart';
+import '../services/socket_service.dart';
 
 class ChatScreen extends StatefulWidget {
   final String channelId;
   final String serverId;
   final String? userId;
+  final String? accessToken;
   final List<Map<String, dynamic>> channels;
   final List<Map<String, dynamic>> users;
   final VoidCallback? onShowSidebar;
@@ -20,6 +22,7 @@ class ChatScreen extends StatefulWidget {
     required this.channelId,
     required this.serverId,
     this.userId,
+    this.accessToken,
     this.channels = const [],
     this.users = const [],
     this.onShowSidebar,
@@ -31,140 +34,177 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
+  final TextEditingController _inputController = TextEditingController();
   final List<Message> _messages = [];
   final Map<String, Message> _messageCache = {};
-  
+
   bool _isLoading = true;
   bool _isLoadingMore = false;
   bool _pinToBottom = true;
   String? _replyingToId;
-  String? _editingMessageId;
-  
-  int _currentPage = 1;
-  static const int _messagesPerPage = 50;
+
+  int _offset = 0;
+  static const int _limit = 25;
+
+  final _socketService = SocketService();
 
   String get userId => widget.userId ?? '';
+  String get accessToken => widget.accessToken ?? '';
 
   @override
   void initState() {
     super.initState();
-    _loadCachedMessages();
-    _loadMessages();
     _scrollController.addListener(_onScroll);
+    _loadCachedMessages();
+    _setupSocketListeners();
+    _requestMessages(0);
+  }
+
+  @override
+  void didUpdateWidget(ChatScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.channelId != widget.channelId ||
+        oldWidget.serverId != widget.serverId) {
+      _removeSocketListeners();
+      setState(() {
+        _messages.clear();
+        _messageCache.clear();
+        _isLoading = true;
+        _offset = 0;
+        _replyingToId = null;
+      });
+      _loadCachedMessages();
+      _setupSocketListeners();
+      _requestMessages(0);
+    }
   }
 
   @override
   void dispose() {
+    _removeSocketListeners();
     _scrollController.dispose();
+    _inputController.dispose();
     super.dispose();
   }
 
+  void _setupSocketListeners() {
+    _socketService.on('all_messages', _onAllMessages);
+    _socketService.on('all_messages_nocache', _onAllMessages);
+    _socketService.on('new_message', _onNewMessage);
+    _socketService.on('update_message', _onUpdateMessage);
+    _socketService.on('message_deleted', _onMessageDeleted);
+  }
+
+  void _removeSocketListeners() {
+    _socketService.off('all_messages', _onAllMessages);
+    _socketService.off('all_messages_nocache', _onAllMessages);
+    _socketService.off('new_message', _onNewMessage);
+    _socketService.off('update_message', _onUpdateMessage);
+    _socketService.off('message_deleted', _onMessageDeleted);
+  }
+
+  void _requestMessages(int offsetValue) {
+    _socketService.socket?.emit('get_messages', {
+      'access_token': accessToken,
+      'server_id': widget.serverId,
+      'channel_id': widget.channelId,
+      'offset': offsetValue,
+    });
+  }
+
+  void _onAllMessages(dynamic data) {
+    if (!mounted) return;
+    final List<dynamic> raw = data is List ? data : [];
+    final incoming = raw.map((j) => Message.fromJson(j as Map<String, dynamic>)).toList();
+
+    setState(() {
+      if (_offset == 0) {
+        _messages.clear();
+        _messageCache.clear();
+        _messages.addAll(incoming);
+      } else {
+        _messages.insertAll(0, incoming);
+      }
+      for (final m in incoming) {
+        _messageCache[m.id] = m;
+      }
+      _isLoading = false;
+      _isLoadingMore = false;
+    });
+
+    _saveMessagesToCache();
+
+    if (_offset == 0 && _pinToBottom) {
+      _scrollToBottom();
+    }
+  }
+
+  void _onNewMessage(dynamic data) {
+    if (!mounted) return;
+    final msg = Message.fromJson(data as Map<String, dynamic>);
+    if (msg.id.isEmpty) return;
+    if (data['channel_id']?.toString() != widget.channelId) return;
+
+    final isAtBottom = _scrollController.hasClients &&
+        (_scrollController.position.maxScrollExtent -
+                _scrollController.position.pixels) <
+            50;
+
+    setState(() {
+      _messages.add(msg);
+      _messageCache[msg.id] = msg;
+    });
+
+    _saveMessagesToCache();
+
+    if (isAtBottom) {
+      _scrollToBottom();
+    }
+  }
+
+  void _onUpdateMessage(dynamic data) {
+    if (!mounted) return;
+    final updated = Message.fromJson(data as Map<String, dynamic>);
+    final index = _messages.indexWhere((m) => m.id == updated.id);
+    if (index == -1) return;
+    setState(() {
+      _messages[index] = updated;
+      _messageCache[updated.id] = updated;
+    });
+    _saveMessagesToCache();
+  }
+
+  void _onMessageDeleted(dynamic data) {
+    if (!mounted) return;
+    final messageId = data['message_id']?.toString() ?? '';
+    if (messageId.isEmpty) return;
+    setState(() {
+      _messages.removeWhere((m) => m.id == messageId);
+      _messageCache.remove(messageId);
+    });
+    _saveMessagesToCache();
+  }
+
   void _onScroll() {
-    if (_scrollController.position.pixels ==
-        _scrollController.position.maxScrollExtent) {
+    if (!_scrollController.hasClients) return;
+
+    if (_scrollController.position.pixels <= 50 && !_isLoadingMore && !_isLoading) {
       _loadMoreMessages();
     }
 
-    final isAtBottom = _scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 10;
-    
+    final isAtBottom =
+        _scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 10;
     if (_pinToBottom != isAtBottom) {
       setState(() => _pinToBottom = isAtBottom);
     }
   }
 
-  Future<void> _loadCachedMessages() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheKey = 'messages_${widget.serverId}_${widget.channelId}';
-      final cachedData = prefs.getString(cacheKey);
-      
-      if (cachedData != null) {
-        final List<dynamic> jsonList = json.decode(cachedData);
-        final messages = jsonList.map((j) => Message.fromJson(j)).toList();
-        
-        setState(() {
-          _messages.clear();
-          _messages.addAll(messages);
-          _messageCache.clear();
-          for (var msg in messages) {
-            _messageCache[msg.id] = msg;
-          }
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading cached messages: $e');
-    }
-  }
-
-  Future<void> _saveMessagesToCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheKey = 'messages_${widget.serverId}_${widget.channelId}';
-      final jsonList = _messages.map((m) => {
-        'id': m.id,
-        'message': m.message,
-        'created_at': m.createdAt,
-        'sent_by': m.sentBy,
-        'sent_by_bot': m.sentByBot,
-        'edited': m.edited,
-        'sender_info': {
-          'username': m.senderInfo.username,
-          'display_name': m.senderInfo.displayName,
-          'profile_picture': m.senderInfo.profilePicture,
-          'premium': m.senderInfo.premium,
-          'staff': m.senderInfo.staff,
-        },
-        'embed': m.embed,
-        'parent_message_info': m.parentMessageInfo != null ? {
-          'message_id': m.parentMessageInfo!.messageId,
-          'username': m.parentMessageInfo!.username,
-          'message_preview': m.parentMessageInfo!.messagePreview,
-        } : null,
-        'command_info': m.commandInfo != null ? {
-          'username': m.commandInfo!.username,
-          'command': m.commandInfo!.command,
-        } : null,
-        'assets': m.assets?.map((a) => {
-          'savedName': a.savedName,
-          'originalName': a.originalName,
-        }).toList(),
-        'reactions': m.reactions?.map((r) => {
-          'reaction': r.reaction,
-          'user_id': r.userId,
-          'super_reaction': r.superReaction,
-        }).toList(),
-        'bot_message': m.botMessage,
-      }).toList();
-      
-      await prefs.setString(cacheKey, json.encode(jsonList));
-    } catch (e) {
-      debugPrint('Error saving messages to cache: $e');
-    }
-  }
-
-  Future<void> _loadMessages() async {
-    setState(() => _isLoading = true);
-    
-    await Future.delayed(const Duration(milliseconds: 500));
-    
+  void _loadMoreMessages() {
     setState(() {
-      _isLoading = false;
-      if (_pinToBottom) _scrollToBottom();
+      _isLoadingMore = true;
+      _offset += _limit;
     });
-  }
-
-  Future<void> _loadMoreMessages() async {
-    if (_isLoadingMore) return;
-    
-    setState(() => _isLoadingMore = true);
-    
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    setState(() {
-      _currentPage++;
-      _isLoadingMore = false;
-    });
+    _requestMessages(_offset);
   }
 
   void _scrollToBottom() {
@@ -179,12 +219,101 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  void _sendMessage() {
+    final text = _inputController.text.trim();
+    if (text.isEmpty) return;
+
+    _socketService.socket?.emit('send_message', {
+      'access_token': accessToken,
+      'server_id': widget.serverId,
+      'channel_id': widget.channelId,
+      'message': text,
+      if (_replyingToId != null) 'reply_to': _replyingToId,
+    });
+
+    _inputController.clear();
+    setState(() => _replyingToId = null);
+  }
+
+  Future<void> _loadCachedMessages() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = 'messages_${widget.serverId}_${widget.channelId}';
+      final cachedData = prefs.getString(cacheKey);
+      if (cachedData != null && mounted) {
+        final List<dynamic> jsonList = json.decode(cachedData);
+        final messages = jsonList.map((j) => Message.fromJson(j)).toList();
+        setState(() {
+          _messages.clear();
+          _messages.addAll(messages);
+          _messageCache.clear();
+          for (var msg in messages) {
+            _messageCache[msg.id] = msg;
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveMessagesToCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = 'messages_${widget.serverId}_${widget.channelId}';
+      final jsonList = _messages.map((m) => {
+            'id': m.id,
+            'message': m.message,
+            'created_at': m.createdAt,
+            'sent_by': m.sentBy,
+            'sent_by_bot': m.sentByBot,
+            'edited': m.edited,
+            'sender_info': {
+              'username': m.senderInfo.username,
+              'display_name': m.senderInfo.displayName,
+              'profile_picture': m.senderInfo.profilePicture,
+              'premium': m.senderInfo.premium,
+              'staff': m.senderInfo.staff,
+            },
+            'embed': m.embed,
+            'parent_message_info': m.parentMessageInfo != null
+                ? {
+                    'message_id': m.parentMessageInfo!.messageId,
+                    'username': m.parentMessageInfo!.username,
+                    'message_preview': m.parentMessageInfo!.messagePreview,
+                  }
+                : null,
+            'command_info': m.commandInfo != null
+                ? {
+                    'username': m.commandInfo!.username,
+                    'command': m.commandInfo!.command,
+                  }
+                : null,
+            'assets': m.assets
+                ?.map((a) => {
+                      'savedName': a.savedName,
+                      'originalName': a.originalName,
+                    })
+                .toList(),
+            'reactions': m.reactions
+                ?.map((r) => {
+                      'reaction': r.reaction,
+                      'user_id': r.userId,
+                      'super_reaction': r.superReaction,
+                    })
+                .toList(),
+            'bot_message': m.botMessage,
+          }).toList();
+      await prefs.setString(cacheKey, json.encode(jsonList));
+    } catch (_) {}
+  }
+
   void _handleReply(String messageId) {
     setState(() => _replyingToId = messageId);
   }
 
   void _handleEdit(String messageId) {
-    setState(() => _editingMessageId = messageId);
+    final msg = _messageCache[messageId];
+    if (msg == null) return;
+    _inputController.text = msg.message;
   }
 
   void _handleDelete(String messageId) {
@@ -203,17 +332,15 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           TextButton(
             onPressed: () {
-              setState(() {
-                _messages.removeWhere((m) => m.id == messageId);
-                _messageCache.remove(messageId);
-              });
-              _saveMessagesToCache();
               Navigator.pop(context);
+              _socketService.socket?.emit('delete_message', {
+                'access_token': accessToken,
+                'server_id': widget.serverId,
+                'channel_id': widget.channelId,
+                'message_id': messageId,
+              });
             },
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: Color(0xFFFF7C7C)),
-            ),
+            child: const Text('Delete', style: TextStyle(color: Color(0xFFFF7C7C))),
           ),
         ],
       ),
@@ -221,46 +348,28 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _handleReact(String messageId, String emoji) {
-    setState(() {
-      final message = _messageCache[messageId];
-      if (message != null) {
-        final reactions = message.reactions ?? [];
-        final existingIndex = reactions.indexWhere(
-          (r) => r.reaction == emoji && r.userId == userId,
-        );
-
-        if (existingIndex >= 0) {
-          reactions.removeAt(existingIndex);
-        } else {
-          reactions.add(Reaction(
-            reaction: emoji,
-            userId: userId,
-            superReaction: false,
-          ));
-        }
-        
-        _saveMessagesToCache();
-      }
+    _socketService.socket?.emit('react', {
+      'access_token': accessToken,
+      'server_id': widget.serverId,
+      'channel_id': widget.channelId,
+      'message_id': messageId,
+      'reaction': emoji,
     });
   }
 
   bool _isCompact(int index) {
     if (index == 0) return false;
-    
     final current = _messages[index];
     final previous = _messages[index - 1];
-    
     if (current.senderId != previous.senderId) return false;
-    
-    final currentTime = DateTime.parse(current.createdAt);
-    final previousTime = DateTime.parse(previous.createdAt);
-    
-    if (currentTime.difference(previousTime).inMinutes > 10) return false;
-    
-    if (current.parentMessageInfo != null || current.commandInfo != null) {
+    try {
+      final currentTime = DateTime.parse(current.createdAt);
+      final previousTime = DateTime.parse(previous.createdAt);
+      if (currentTime.difference(previousTime).inMinutes > 10) return false;
+    } catch (_) {
       return false;
     }
-    
+    if (current.parentMessageInfo != null || current.commandInfo != null) return false;
     return true;
   }
 
@@ -271,13 +380,15 @@ class _ChatScreenState extends State<ChatScreen> {
 
   bool _needsDateSeparator(int index) {
     if (index == 0) return true;
-    
-    final current = DateTime.parse(_messages[index].createdAt);
-    final previous = DateTime.parse(_messages[index - 1].createdAt);
-    
-    return current.day != previous.day ||
-        current.month != previous.month ||
-        current.year != previous.year;
+    try {
+      final current = DateTime.parse(_messages[index].createdAt);
+      final previous = DateTime.parse(_messages[index - 1].createdAt);
+      return current.day != previous.day ||
+          current.month != previous.month ||
+          current.year != previous.year;
+    } catch (_) {
+      return false;
+    }
   }
 
   @override
@@ -289,72 +400,93 @@ class _ChatScreenState extends State<ChatScreen> {
       body: Column(
         children: [
           Expanded(
-            child: _isLoading
+            child: _isLoading && _messages.isEmpty
                 ? _buildSkeletonLoader(isDark)
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                    itemCount: _messages.length + (_isLoadingMore ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index == _messages.length) {
-                        return const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(20),
-                            child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF895BF5)),
-                            ),
-                          ),
-                        );
-                      }
-
-                      final message = _messages[index];
-                      final isCompact = _isCompact(index);
-                      final isMentioned = _isMentioned(message);
-                      final needsSeparator = _needsDateSeparator(index);
-
-                      return Column(
-                        children: [
-                          if (needsSeparator)
-                            DateSeparator(
-                              date: DateTime.parse(message.createdAt),
-                            ),
-                          Slidable(
-                            key: ValueKey(message.id),
-                            endActionPane: ActionPane(
-                              motion: const DrawerMotion(),
-                              extentRatio: 0.2,
-                              children: [
-                                SlidableAction(
-                                  onPressed: (_) => _handleReply(message.id),
-                                  backgroundColor: const Color(0xFF895BF5),
-                                  foregroundColor: Colors.white,
-                                  icon: Icons.reply,
-                                  label: 'Reply',
+                : Stack(
+                    children: [
+                      ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                        itemCount: _messages.length + (_isLoadingMore ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index == 0 && _isLoadingMore) {
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(12),
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF895BF5)),
                                 ),
-                              ],
-                            ),
-                            child: MessageWidget(
-                              message: message,
-                              isCompact: isCompact,
-                              isMentioned: isMentioned,
-                              currentUserId: userId,
-                              channels: widget.channels,
-                              users: widget.users,
-                              onReply: _handleReply,
-                              onEdit: _handleEdit,
-                              onDelete: _handleDelete,
-                              onReact: _handleReact,
-                              onUserTap: (userId) {
-                                debugPrint('Tapped user: $userId');
-                              },
-                              onChannelTap: (channelId) {
-                                debugPrint('Tapped channel: $channelId');
-                              },
+                              ),
+                            );
+                          }
+
+                          final msgIndex = _isLoadingMore ? index - 1 : index;
+                          final message = _messages[msgIndex];
+                          final isCompact = _isCompact(msgIndex);
+                          final isMentioned = _isMentioned(message);
+                          final needsSeparator = _needsDateSeparator(msgIndex);
+
+                          return Column(
+                            children: [
+                              if (needsSeparator)
+                                DateSeparator(date: DateTime.tryParse(message.createdAt) ?? DateTime.now()),
+                              Slidable(
+                                key: ValueKey(message.id),
+                                endActionPane: ActionPane(
+                                  motion: const DrawerMotion(),
+                                  extentRatio: 0.2,
+                                  children: [
+                                    SlidableAction(
+                                      onPressed: (_) => _handleReply(message.id),
+                                      backgroundColor: const Color(0xFF895BF5),
+                                      foregroundColor: Colors.white,
+                                      icon: Icons.reply,
+                                      label: 'Reply',
+                                    ),
+                                  ],
+                                ),
+                                child: MessageWidget(
+                                  message: message,
+                                  isCompact: isCompact,
+                                  isMentioned: isMentioned,
+                                  currentUserId: userId,
+                                  channels: widget.channels,
+                                  users: widget.users,
+                                  onReply: _handleReply,
+                                  onEdit: _handleEdit,
+                                  onDelete: _handleDelete,
+                                  onReact: _handleReact,
+                                  onUserTap: (_) {},
+                                  onChannelTap: (_) {},
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                      if (!_pinToBottom)
+                        Positioned(
+                          bottom: 8,
+                          right: 12,
+                          child: GestureDetector(
+                            onTap: _scrollToBottom,
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF895BF5),
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.3),
+                                    blurRadius: 6,
+                                  )
+                                ],
+                              ),
+                              child: const Icon(Icons.arrow_downward, color: Colors.white, size: 20),
                             ),
                           ),
-                        ],
-                      );
-                    },
+                        ),
+                    ],
                   ),
           ),
           if (_replyingToId != null) _buildReplyingBanner(isDark),
@@ -380,10 +512,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 Container(
                   width: 30,
                   height: 30,
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                  ),
+                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -394,27 +523,21 @@ class _ChatScreenState extends State<ChatScreen> {
                         width: 120,
                         height: 16,
                         decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+                            color: Colors.white, borderRadius: BorderRadius.circular(4)),
                       ),
                       const SizedBox(height: 8),
                       Container(
                         width: double.infinity,
                         height: 14,
                         decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+                            color: Colors.white, borderRadius: BorderRadius.circular(4)),
                       ),
                       const SizedBox(height: 4),
                       Container(
                         width: 200,
                         height: 14,
                         decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+                            color: Colors.white, borderRadius: BorderRadius.circular(4)),
                       ),
                     ],
                   ),
@@ -429,7 +552,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildReplyingBanner(bool isDark) {
     final replyMessage = _messageCache[_replyingToId];
-    
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
       decoration: BoxDecoration(
@@ -480,12 +602,15 @@ class _ChatScreenState extends State<ChatScreen> {
             onPressed: () {},
             color: isDark ? const Color(0xFFB2B2B2) : const Color(0xFF4D4D4D),
           ),
-          const Expanded(
+          Expanded(
             child: TextField(
-              decoration: InputDecoration(
+              controller: _inputController,
+              decoration: const InputDecoration(
                 hintText: 'Type a message...',
                 border: InputBorder.none,
               ),
+              onSubmitted: (_) => _sendMessage(),
+              textInputAction: TextInputAction.send,
             ),
           ),
           IconButton(
@@ -495,7 +620,7 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.send),
-            onPressed: () {},
+            onPressed: _sendMessage,
             color: const Color(0xFF895BF5),
           ),
         ],

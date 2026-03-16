@@ -260,13 +260,14 @@ class _HomeTabState extends State<HomeTab> {
       );
     }
   }
-
+  
   void _openChat() {
-    if (_selectedServer != null && _selectedChannelId != null && _userId != null) {
+    if (_selectedServer != null && _selectedChannelId != null && _userId != null ) {
       widget.overlayNotifier.show(
         server: _selectedServer!.id,
         channel: _selectedChannelId!,
         userId: _userId!,
+        accessToken: _accessToken ?? '',
       );
     }
   }

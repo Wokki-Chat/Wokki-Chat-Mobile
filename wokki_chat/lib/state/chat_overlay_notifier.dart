@@ -46,6 +46,7 @@ class ChatOverlayNotifier extends ValueNotifier<ChatOverlayState> {
   void show({
     required String server,
     required String channel,
+    required String accessToken,
     String? userId,
     List<Map<String, dynamic>>? channels,
     List<Map<String, dynamic>>? users,
@@ -57,6 +58,7 @@ class ChatOverlayNotifier extends ValueNotifier<ChatOverlayState> {
       userId: userId,
       channels: channels,
       users: users,
+      accessToken: accessToken,
     );
   }
 
