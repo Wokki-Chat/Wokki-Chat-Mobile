@@ -8,6 +8,7 @@ class ChatOverlayState {
   final List<Map<String, dynamic>>? channels;
   final List<Map<String, dynamic>>? users;
   final double dragValue;
+  final String? accessToken;
 
   const ChatOverlayState({
     this.visible = false,
@@ -17,6 +18,7 @@ class ChatOverlayState {
     this.channels,
     this.users,
     this.dragValue = 0.0,
+    this.accessToken,
   });
 
   ChatOverlayState copyWith({
